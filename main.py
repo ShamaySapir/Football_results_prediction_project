@@ -1,3 +1,5 @@
+import json
+import xmltodict
 import sys
 import sqlite3
 import pandas as pd
@@ -103,12 +105,21 @@ def discritization(data):
 # clean the data from none values and outliers,
 # also does a disritization for relevant features
 def pre_processing(data):
-    return discritization(clean_outlier(clean_na(drop_features(data))))
+    discritization(clean_outlier(clean_na(drop_features(data))))
 
 
 # This method creates the goal variable of the data
 def create_goal_var(data):
-    return data
+    data['target'] = data.apply(lambda _: '', axis=1)
+    for index, row in data.iterrows():
+        if row['home_team_goal'] > row['away_team_goal']:
+            data.append({'target': -1}, ignore_index=True)
+
+        elif row['home_team_goal'] < row['away_team_goal']:
+            data.append({'target': 1}, ignore_index=True)
+
+        else:
+            data.append({'target': 0}, ignore_index=True)
 
 
 # This method adds missing categorials values
@@ -153,12 +164,28 @@ def evaluate_model(model, data, X, y):
     return model
 
 
+def convert_xml_to_json_feature(xml):
+    if xml is None:
+        return json.dumps({})
+
+    json_xml = xmltodict.parse(xml)
+    json_feature = json.dumps(json_xml)
+    return json_feature
+
+
+def xml_change_values(data):
+    features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+    for feature in features:
+        data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x[feature]), axis=1,
+                                            result_type='broadcast')
+
+
 if __name__ == '__main__':
     # read data from squlite
     data = get_data()
+    xml_change_values(data)
     # clean data
-    data = pre_processing(data)
+    pre_processing(data)
     # create goal variable (y)
-    data = create_goal_var(data)
+    create_goal_var(data)
     # Have the Data as X, y
-
