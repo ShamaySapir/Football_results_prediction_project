@@ -63,6 +63,11 @@ def get_data():
     return data
 
 
+# This method creates the goal variable of the data
+def create_goal_var(data):
+    return data
+
+
 # This method adds missing categorials values
 def add_categorial_missing_values(data, col):
     data[col].fillna(data[col].mode()[0], inplace=True)
@@ -108,5 +113,8 @@ def evaluate_model(model, data, X, y):
 if __name__ == '__main__':
     # read data from squlite
     data = get_data()
-    print(data)
+    #clean
+    # create goal variable (y)
+    data = create_goal_var(data)
     # Have the Data as X, y
+
