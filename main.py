@@ -1,6 +1,7 @@
 import json
 import xmltodict
 import sys
+# from bs4 import BeautifulSoup
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -47,27 +48,27 @@ def get_data():
                             TAA.buildUpPlaySpeedClass AS a_playSpeed,
                             TAA.buildUpPlayDribblingClass AS a_playDribbling,
                             TAA.buildUpPlayPassingClass AS a_playPassing,
-                            TAA.buildUpPlayPositioningClass AS h_playPositioing,
-                            TAA.chanceCreationPassingClass AS h_creationPassing,
-                            TAA.chanceCreationCrossingClass AS h_creationCrossing,
-                            TAA.chanceCreationShootingClass AS h_creationShooting,
-                            TAA.chanceCreationPositioningClass AS h_creationPositioing,
-                            TAA.defencePressureClass AS h_defencePressure,
-                            TAA.defenceAggressionClass AS a_defenceAggressionClass,
-                            TAA.defenceTeamWidthClass AS a_defenceTeamWidthClass,
-                            TAA.defenceDefenderLineClass AS a_defenceDefenderLineClass
+                            TAA.buildUpPlayPositioningClass AS a_playPositioing,
+                            TAA.chanceCreationPassingClass AS a_creationPassing,
+                            TAA.chanceCreationCrossingClass AS a_creationCrossing,
+                            TAA.chanceCreationShootingClass AS a_creationShooting,
+                            TAA.chanceCreationPositioningClass AS a_creationPositioing,
+                            TAA.defencePressureClass AS 'a_defencePressure',
+                            TAA.defenceAggressionClass AS a_defenceAggression,
+                            TAA.defenceTeamWidthClass AS a_defenceTeamWidth,
+                            TAA.defenceDefenderLineClass AS a_defenceDefenderLine
                     FROM Match
                     JOIN League on League.id = Match.league_id
                     LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
                     LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
                     WHERE season not like '2015/2016' and goal is not null
-                    LIMIT 700000;""", conn)
+                    LIMIT 50000;""", conn)
     return data
 
 
 # This method drop unnecessary features
 def drop_features(data):
-    features_to_drop = ['league_name', 'season']
+    features_to_drop = ['league_name', 'season', 'shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     data.drop(features_to_drop, axis='columns', inplace=True)
     return data
 
@@ -77,7 +78,9 @@ def clean_na(data):
     threshold = int(0.7 * len(data))
     # This loop remove all features that the number of non none values is at least 70%.
     for col in data.columns:
-        if threshold > data[col].count():
+        count = data[col].count()
+        if threshold > count:
+            print(data[col].count())
             data.drop(col, axis='columns', inplace=True)
     # Clean all row that have more then 5 features with None values.
     data.dropna(thresh=5, inplace=True)
@@ -95,17 +98,27 @@ def clean_outlier(data):
 
 def discritization(data):
     # convert categorial variables into numeric values
-    categorial_vec = ['Married', 'Dependents', 'Education', 'Self_Employed', 'Property_Area']
+    categorial_vec = ['h_playSpeed', 'a_playSpeed', 'h_playDribbling', 'a_playDribbling', 'h_playPassing',
+                      'a_playPassing', 'h_playPositioing', 'a_playPositioing', 'h_creationPassing',
+                      'a_creationPassing', 'h_creationCrossing', 'a_creationCrossing', 'h_creationShooting',
+                      'a_creationShooting', 'h_creationPositioing', 'a_creationPositioing', 'h_defencePressure',
+                      'a_defencePressure', 'h_defenceAggression', 'a_defenceAggression', 'h_defenceTeamWidth',
+                      'a_defenceTeamWidth', 'h_defenceDefenderLine', 'a_defenceDefenderLine']
     label_encoder = LabelEncoder()
     for category in categorial_vec:
         data[category] = label_encoder.fit_transform(data[category])
-
+    return data
 
 # This method drop features from data,
 # clean the data from none values and outliers,
 # also does a disritization for relevant features
 def pre_processing(data):
-    discritization(clean_outlier(clean_na(drop_features(data))))
+    data = drop_features(data)
+    data = clean_na(data)
+    data = clean_outlier(data)
+    data = discritization(data)
+    # discritization(clean_outlier(clean_na(drop_features(data))))
+    return data
 
 
 # This method creates the goal variable of the data
@@ -113,13 +126,12 @@ def create_goal_var(data):
     data['target'] = data.apply(lambda _: '', axis=1)
     for index, row in data.iterrows():
         if row['home_team_goal'] > row['away_team_goal']:
-            data.append({'target': -1}, ignore_index=True)
-
+            data['target'] = 1
         elif row['home_team_goal'] < row['away_team_goal']:
-            data.append({'target': 1}, ignore_index=True)
-
+            data['target'] = -1
         else:
-            data.append({'target': 0}, ignore_index=True)
+            data['target'] = 0
+    return data
 
 
 # This method adds missing categorials values
@@ -164,28 +176,44 @@ def evaluate_model(model, data, X, y):
     return model
 
 
-def convert_xml_to_json_feature(xml):
-    if xml is None:
-        return json.dumps({})
+# def convert_xml_to_json_feature(xml):
+#     if xml is None:
+#         return json.dumps({})
+#
+#     json_xml = xmltodict.parse(xml)
+#     json_feature = json.dumps(json_xml)
+#     return json_feature
+#
+#
+# def xml_change_values(data):
+#     features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+#     for feature in features:
+#         data[[feature]] = data[[feature]].apply(lambda x: convert_xml_to_json_feature(x[feature]), axis=1,
+#                                             result_type='broadcast')
+#     return data
 
-    json_xml = xmltodict.parse(xml)
-    json_feature = json.dumps(json_xml)
-    return json_feature
+def convert_xml_to_json_feature(xml):
+    json_xml = np.NaN
+    if xml is not None:
+        dict_xml = xmltodict.parse(xml)
+        json_xml = json.dumps(dict_xml)
+    return json_xml
 
 
 def xml_change_values(data):
     features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     for feature in features:
-        data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x[feature]), axis=1,
-                                            result_type='broadcast')
+        data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x))
+    return data
 
 
 if __name__ == '__main__':
     # read data from squlite
     data = get_data()
-    xml_change_values(data)
+    data = xml_change_values(data)
     # clean data
-    pre_processing(data)
+    data = pre_processing(data)
     # create goal variable (y)
-    create_goal_var(data)
+    data = create_goal_var(data)
     # Have the Data as X, y
+    print(data)
