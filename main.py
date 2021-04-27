@@ -109,6 +109,7 @@ def discritization(data):
         data[category] = label_encoder.fit_transform(data[category])
     return data
 
+
 # This method drop features from data,
 # clean the data from none values and outliers,
 # also does a disritization for relevant features
@@ -144,9 +145,13 @@ def add_numerical_missing_values(data, col):
     data[col].fillna(data[col].mean(), inplace=True)
 
 
+def fill_nones(train, test):
+    print(train)
+
+
 # This method choose best params model by using grid search algorithm
 def best_params_model(model, X, y, grid_variables):
-    k_fold = KFold(n_splits=10)
+    k_fold = KFold(n_splits=5)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
     grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
     grid_results = grid.fit(X_train, y_train)
@@ -154,13 +159,12 @@ def best_params_model(model, X, y, grid_variables):
     return model
 
 
-def fill_nones(train, test):
-    print(train)
-
-
-def evaluate_model(model, data, X, y):
+def fit_model(model, data, X, y):
     k_fold = KFold(n_splits=10)
     accuracy_list = []
+    f1_score_list = []
+    f1_max_score = 0
+    final_model = None
     for train_index, test_index in k_fold.split(data):
         train_predictors = X.iloc[train_index, :]
         train_target = y.iloc[train_index]
@@ -168,13 +172,24 @@ def evaluate_model(model, data, X, y):
         test_target = y.iloc[test_index]
         fill_nones(train_predictors, test_predictors)
         model.fit(train_predictors, train_target)
+
         model_prediction = model.predict(test_predictors)
         accuracy = accuracy_score(test_target, model_prediction)
         accuracy_list.append(accuracy)
+        f1 = f1_score(test_target, model_prediction)
+        f1_score_list.append(f1)
 
-    print("Cross-Validation Accuracy Score: %s" % "{0:.3}".format(mean(accuracy_list)))
-    return model
+        if f1 > f1_max_score:
+            f1_max_score = f1
+            final_model = model
+    evaluation_params = [accuracy_list, f1_score_list]
+    return final_model, evaluation_params
 
+
+def print_model_evaluation(evaluation_lists, name):
+    print(f'--------{name}-------')
+    print('Accuracy Score: %.3f (%.3f)' % (mean(evaluation_lists[0])))
+    print('F1 Score: %.3f (%.3f)' % (mean(evaluation_lists[1])))
 
 # def convert_xml_to_json_feature(xml):
 #     if xml is None:
@@ -192,6 +207,7 @@ def evaluate_model(model, data, X, y):
 #                                             result_type='broadcast')
 #     return data
 
+
 def convert_xml_to_json_feature(xml):
     json_xml = np.NaN
     if xml is not None:
@@ -205,6 +221,18 @@ def xml_change_values(data):
     for feature in features:
         data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x))
     return data
+
+
+# Random Forest
+def random_forest_best_model(data, X, y):
+    model = RandomForestClassifier()
+    n_estimators = [10, 20, 30] + [i for i in range(45, 105, 5)]
+    max_depth = [2, 4, 8, 16, 32, 64]
+    grid_variables = {'n_estimators': n_estimators, 'max_depth': max_depth}
+    best_model = best_params_model(model, X, y, grid_variables)
+    best_model, evaluation_params = fit_model(best_model, data, X, y)
+    print_model_evaluation(evaluation_params, "Random Forest")
+    return best_model
 
 
 if __name__ == '__main__':
