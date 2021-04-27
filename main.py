@@ -63,6 +63,18 @@ def get_data():
     return data
 
 
+# This method clean the data from none values
+def pre_processing(data):
+    threshold = int(0.7 * len(data))
+    # This loop remove all features that the number of non none values is at least 70%.
+    for col in data.columns:
+        if threshold > data[col].count():
+            data.drop(col, axis='columns', inplace=True)
+    # Clean all row that have more then 5 features with None values.
+    data.dropna(thresh=5, inplace=True)
+    return data
+
+
 # This method creates the goal variable of the data
 def create_goal_var(data):
     return data
@@ -88,8 +100,8 @@ def best_params_model(model, X, y, grid_variables):
     return model
 
 
-def fill_nones(train_predictors, test_predictors):
-    print(train_predictors)
+def fill_nones(train, test):
+    print(train)
 
 
 def evaluate_model(model, data, X, y):
@@ -113,7 +125,8 @@ def evaluate_model(model, data, X, y):
 if __name__ == '__main__':
     # read data from squlite
     data = get_data()
-    #clean
+    # clean data
+    data = pre_processing(data)
     # create goal variable (y)
     data = create_goal_var(data)
     # Have the Data as X, y
