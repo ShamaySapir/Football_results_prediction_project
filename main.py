@@ -1,3 +1,5 @@
+import json
+import xmltodict
 import sys
 import sqlite3
 import pandas as pd
@@ -65,7 +67,18 @@ def get_data():
 
 # This method creates the goal variable of the data
 def create_goal_var(data):
-    return data
+    data['target'] = data.apply(lambda _: '', axis=1)
+    for index, row in data.iterrows():
+        if row['home_team_goal'] > row['away_team_goal']:
+            data = data.append({'target': -1}, ignore_index=True)
+
+        elif row['home_team_goal'] < row['away_team_goal']:
+            data = data.append({'target': 1}, ignore_index=True)
+
+        else:
+            data = data.append({'target': 0}, ignore_index=True)
+
+    # return data
 
 
 # This method adds missing categorials values
@@ -109,12 +122,34 @@ def evaluate_model(model, data, X, y):
     print("Cross-Validation Accuracy Score: %s" % "{0:.3}".format(mean(accuracy_list)))
     return model
 
+def convert_xml_to_json_feature(xml):
+    if xml is None:
+        return json.dumps({})
+
+    json_xml = xmltodict.parse(xml)
+    json_feature = json.dumps(json_xml)
+    return json_feature
+
+
+def xml_change_values(df):
+    features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+    for feature in features:
+        df[[feature]] = df[[feature]].apply(lambda x: convert_xml_to_json_feature(x[feature]), axis=1,
+                                            result_type='broadcast')
+
+
 
 if __name__ == '__main__':
     # read data from squlite
     data = get_data()
+    # print("get data success")
     #clean
     # create goal variable (y)
     data = create_goal_var(data)
+    # print("create_goal_var success'")
     # Have the Data as X, y
+
+    xml_change_values(data)
+    # print("xml_change_values success")
+
 
