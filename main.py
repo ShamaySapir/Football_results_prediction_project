@@ -15,7 +15,7 @@ from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, tra
 # get data from sqlite
 def get_data():
     conn = sqlite3.connect('database.sqlite')
-    data = pd.read_sql("""SELECT Match.id, 
+    data = pd.read_sql("""SELECT Match.id AS match_id,
                             League.name AS league_name, 
                             season, 
                             stage, 
@@ -25,41 +25,60 @@ def get_data():
                             corner,
                             foulcommit,
                             card,
-                            TAH.team_api_id AS home_team_api_id,
-                            TAA.team_api_id AS away_team_api_id,
+                            TAH.team_api_id AS home_team_id,
+                            TAA.team_api_id AS away_team_id,
                             home_team_goal, 
                             away_team_goal,
-                            TAH.buildUpPlaySpeedClass AS home_buildUpPlaySpeedClass,
-                            TAH.buildUpPlayDribblingClass AS home_buildUpPlayDribblingClass,
-                            TAH.buildUpPlayPassingClass AS home_buildUpPlayPassingClass,
-                            TAH.buildUpPlayPositioningClass AS home_buildUpPlayPositioingClass,
-                            TAH.chanceCreationPassingClass AS home_chanceCreationPassingClass,
-                            TAH.chanceCreationCrossingClass AS home_chanceCreationCrossingClass,
-                            TAH.chanceCreationShootingClass AS home_chanceCreationShootingClass,
-                            TAH.chanceCreationPositioningClass AS home_chanceCreationPositioingClass,
-                            TAH.defencePressureClass AS home_defencePressureClass,
-                            TAH.defenceAggressionClass AS home_defenceAggressionClass,
-                            TAH.defenceTeamWidthClass AS home_defenceTeamWidthClass,
-                            TAH.defenceDefenderLineClass AS home_defenceDefenderLineClass,
+                            TAH.buildUpPlaySpeedClass AS h_playSpeed,
+                            TAH.buildUpPlayDribblingClass AS h_playDribbling,
+                            TAH.buildUpPlayPassingClass AS h_playPassing,
+                            TAH.buildUpPlayPositioningClass AS h_playPositioing,
+                            TAH.chanceCreationPassingClass AS h_creationPassing,
+                            TAH.chanceCreationCrossingClass AS h_creationCrossing,
+                            TAH.chanceCreationShootingClass AS h_creationShooting,
+                            TAH.chanceCreationPositioningClass AS h_creationPositioing,
+                            TAH.defencePressureClass AS h_defencePressure,
+                            TAH.defenceAggressionClass AS h_defenceAggression,
+                            TAH.defenceTeamWidthClass AS h_defenceTeamWidth,
+                            TAH.defenceDefenderLineClass AS h_defenceDefenderLine,
 
-                            TAA.buildUpPlaySpeedClass AS away_buildUpPlaySpeedClass,
-                            TAA.buildUpPlayDribblingClass AS away_buildUpPlayDribblingClass,
-                            TAA.buildUpPlayPassingClass AS away_buildUpPlayPassingClass,
-                            TAA.buildUpPlayPositioningClass AS away_buildUpPlayPositioingClass,
-                            TAA.chanceCreationPassingClass AS away_chanceCreationPassingClass,
-                            TAA.chanceCreationCrossingClass AS away_chanceCreationCrossingClass,
-                            TAA.chanceCreationShootingClass AS away_chanceCreationShootingClass,
-                            TAA.chanceCreationPositioningClass AS away_chanceCreationPositioingClass,
-                            TAA.defencePressureClass AS away_defencePressureClass,
-                            TAA.defenceAggressionClass AS away_defenceAggressionClass,
-                            TAA.defenceTeamWidthClass AS away_defenceTeamWidthClass,
-                            TAA.defenceDefenderLineClass AS away_defenceDefenderLineClass
+                            TAA.buildUpPlaySpeedClass AS a_playSpeed,
+                            TAA.buildUpPlayDribblingClass AS a_playDribbling,
+                            TAA.buildUpPlayPassingClass AS a_playPassing,
+                            TAA.buildUpPlayPositioningClass AS h_playPositioing,
+                            TAA.chanceCreationPassingClass AS h_creationPassing,
+                            TAA.chanceCreationCrossingClass AS h_creationCrossing,
+                            TAA.chanceCreationShootingClass AS h_creationShooting,
+                            TAA.chanceCreationPositioningClass AS h_creationPositioing,
+                            TAA.defencePressureClass AS h_defencePressure,
+                            TAA.defenceAggressionClass AS a_defenceAggressionClass,
+                            TAA.defenceTeamWidthClass AS a_defenceTeamWidthClass,
+                            TAA.defenceDefenderLineClass AS a_defenceDefenderLineClass
                     FROM Match
                     JOIN League on League.id = Match.league_id
                     LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
                     LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
                     WHERE season not like '2015/2016' and goal is not null
                     LIMIT 700000;""", conn)
+    return data
+
+
+# This method drop unnecessary features
+def drop_features(data):
+    features_to_drop = ['league_name', 'season']
+    data.drop(features_to_drop, axis='columns', inplace=True)
+    return data
+
+
+# This method clean none values
+def clean_na(data):
+    threshold = int(0.7 * len(data))
+    # This loop remove all features that the number of non none values is at least 70%.
+    for col in data.columns:
+        if threshold > data[col].count():
+            data.drop(col, axis='columns', inplace=True)
+    # Clean all row that have more then 5 features with None values.
+    data.dropna(thresh=5, inplace=True)
     return data
 
 
@@ -72,17 +91,19 @@ def clean_outlier(data):
     return data
 
 
-# This method clean the data from none values and outliers
+def discritization(data):
+    # convert categorial variables into numeric values
+    categorial_vec = ['Married', 'Dependents', 'Education', 'Self_Employed', 'Property_Area']
+    label_encoder = LabelEncoder()
+    for category in categorial_vec:
+        data[category] = label_encoder.fit_transform(data[category])
+
+
+# This method drop features from data,
+# clean the data from none values and outliers,
+# also does a disritization for relevant features
 def pre_processing(data):
-    threshold = int(0.7 * len(data))
-    # This loop remove all features that the number of non none values is at least 70%.
-    for col in data.columns:
-        if threshold > data[col].count():
-            data.drop(col, axis='columns', inplace=True)
-    # Clean all row that have more then 5 features with None values.
-    data.dropna(thresh=5, inplace=True)
-    clean_outlier(data)
-    return data
+    return discritization(clean_outlier(clean_na(drop_features(data))))
 
 
 # This method creates the goal variable of the data
