@@ -12,14 +12,55 @@ from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 
 
-
 # get data from sqlite
 def get_data():
-    try:
-        conn = sqlite3.connect("database.sqlite")
-    except sqlite3.Error as e:
-        print(e)
-    return conn
+    conn = sqlite3.connect('database.sqlite')
+    data = pd.read_sql("""SELECT Match.id, 
+                            League.name AS league_name, 
+                            season, 
+                            stage, 
+                            shoton,
+                            shotoff,
+                            goal,
+                            corner,
+                            foulcommit,
+                            card,
+                            TAH.team_api_id AS home_team_api_id,
+                            TAA.team_api_id AS away_team_api_id,
+                            home_team_goal, 
+                            away_team_goal,
+                            TAH.buildUpPlaySpeedClass AS home_buildUpPlaySpeedClass,
+                            TAH.buildUpPlayDribblingClass AS home_buildUpPlayDribblingClass,
+                            TAH.buildUpPlayPassingClass AS home_buildUpPlayPassingClass,
+                            TAH.buildUpPlayPositioningClass AS home_buildUpPlayPositioingClass,
+                            TAH.chanceCreationPassingClass AS home_chanceCreationPassingClass,
+                            TAH.chanceCreationCrossingClass AS home_chanceCreationCrossingClass,
+                            TAH.chanceCreationShootingClass AS home_chanceCreationShootingClass,
+                            TAH.chanceCreationPositioningClass AS home_chanceCreationPositioingClass,
+                            TAH.defencePressureClass AS home_defencePressureClass,
+                            TAH.defenceAggressionClass AS home_defenceAggressionClass,
+                            TAH.defenceTeamWidthClass AS home_defenceTeamWidthClass,
+                            TAH.defenceDefenderLineClass AS home_defenceDefenderLineClass,
+
+                            TAA.buildUpPlaySpeedClass AS away_buildUpPlaySpeedClass,
+                            TAA.buildUpPlayDribblingClass AS away_buildUpPlayDribblingClass,
+                            TAA.buildUpPlayPassingClass AS away_buildUpPlayPassingClass,
+                            TAA.buildUpPlayPositioningClass AS away_buildUpPlayPositioingClass,
+                            TAA.chanceCreationPassingClass AS away_chanceCreationPassingClass,
+                            TAA.chanceCreationCrossingClass AS away_chanceCreationCrossingClass,
+                            TAA.chanceCreationShootingClass AS away_chanceCreationShootingClass,
+                            TAA.chanceCreationPositioningClass AS away_chanceCreationPositioingClass,
+                            TAA.defencePressureClass AS away_defencePressureClass,
+                            TAA.defenceAggressionClass AS away_defenceAggressionClass,
+                            TAA.defenceTeamWidthClass AS away_defenceTeamWidthClass,
+                            TAA.defenceDefenderLineClass AS away_defenceDefenderLineClass
+                    FROM Match
+                    JOIN League on League.id = Match.league_id
+                    LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
+                    LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
+                    WHERE season not like '2015/2016' and goal is not null
+                    LIMIT 700000;""", conn)
+    return data
 
 
 # This method adds missing categorials values
@@ -42,8 +83,8 @@ def best_params_model(model, X, y, grid_variables):
     return model
 
 
-def fill_nones(train_predictors, train_target, test_predictors, test_target):
-    pass
+def fill_nones(train_predictors, test_predictors):
+    print(train_predictors)
 
 
 def evaluate_model(model, data, X, y):
@@ -54,7 +95,7 @@ def evaluate_model(model, data, X, y):
         train_target = y.iloc[train_index]
         test_predictors = X.iloc[test_index, :]
         test_target = y.iloc[test_index]
-        fill_nones(train_predictors, train_target, test_predictors, test_target)
+        fill_nones(train_predictors, test_predictors)
         model.fit(train_predictors, train_target)
         model_prediction = model.predict(test_predictors)
         accuracy = accuracy_score(test_target, model_prediction)
@@ -66,6 +107,6 @@ def evaluate_model(model, data, X, y):
 
 if __name__ == '__main__':
     # read data from squlite
-    conn = get_data()
-
+    data = get_data()
+    print(data)
     # Have the Data as X, y
