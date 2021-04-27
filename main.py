@@ -63,7 +63,16 @@ def get_data():
     return data
 
 
-# This method clean the data from none values
+# This method detects outlier records
+def clean_outlier(data):
+    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    for col in data.columns:
+        if data[col].dtypes in numerics:
+            data = data[np.abs(data[col]-data[col].mean()) <= (3*data[col].std())]
+    return data
+
+
+# This method clean the data from none values and outliers
 def pre_processing(data):
     threshold = int(0.7 * len(data))
     # This loop remove all features that the number of non none values is at least 70%.
@@ -72,6 +81,7 @@ def pre_processing(data):
             data.drop(col, axis='columns', inplace=True)
     # Clean all row that have more then 5 features with None values.
     data.dropna(thresh=5, inplace=True)
+    clean_outlier(data)
     return data
 
 
