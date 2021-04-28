@@ -15,8 +15,8 @@ from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 
 
-# get data from sqlite
-def get_data():
+# get train data from sqlite
+def get_train_data():
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id AS match_id,
                             League.name AS league_name, 
@@ -62,7 +62,60 @@ def get_data():
                     LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
                     LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
                     WHERE season not like '2015/2016' and goal is not null
-                    LIMIT 50000;""", conn)
+                    LIMIT 1000;""", conn)
+    print("1. Got train data succssefully")
+    return data
+
+
+# get test data from sqlite
+def get_test_data():
+    conn = sqlite3.connect('database.sqlite')
+    data = pd.read_sql("""SELECT Match.id AS match_id,
+                            League.name AS league_name, 
+                            season, 
+                            stage, 
+                            shoton,
+                            shotoff,
+                            goal,
+                            corner,
+                            foulcommit,
+                            card,
+                            TAH.team_api_id AS home_team_id,
+                            TAA.team_api_id AS away_team_id,
+                            home_team_goal, 
+                            away_team_goal,
+                            TAH.buildUpPlaySpeedClass AS h_playSpeed,
+                            TAH.buildUpPlayDribblingClass AS h_playDribbling,
+                            TAH.buildUpPlayPassingClass AS h_playPassing,
+                            TAH.buildUpPlayPositioningClass AS h_playPositioing,
+                            TAH.chanceCreationPassingClass AS h_creationPassing,
+                            TAH.chanceCreationCrossingClass AS h_creationCrossing,
+                            TAH.chanceCreationShootingClass AS h_creationShooting,
+                            TAH.chanceCreationPositioningClass AS h_creationPositioing,
+                            TAH.defencePressureClass AS h_defencePressure,
+                            TAH.defenceAggressionClass AS h_defenceAggression,
+                            TAH.defenceTeamWidthClass AS h_defenceTeamWidth,
+                            TAH.defenceDefenderLineClass AS h_defenceDefenderLine,
+
+                            TAA.buildUpPlaySpeedClass AS a_playSpeed,
+                            TAA.buildUpPlayDribblingClass AS a_playDribbling,
+                            TAA.buildUpPlayPassingClass AS a_playPassing,
+                            TAA.buildUpPlayPositioningClass AS a_playPositioing,
+                            TAA.chanceCreationPassingClass AS a_creationPassing,
+                            TAA.chanceCreationCrossingClass AS a_creationCrossing,
+                            TAA.chanceCreationShootingClass AS a_creationShooting,
+                            TAA.chanceCreationPositioningClass AS a_creationPositioing,
+                            TAA.defencePressureClass AS 'a_defencePressure',
+                            TAA.defenceAggressionClass AS a_defenceAggression,
+                            TAA.defenceTeamWidthClass AS a_defenceTeamWidth,
+                            TAA.defenceDefenderLineClass AS a_defenceDefenderLine
+                    FROM Match
+                    JOIN League on League.id = Match.league_id
+                    LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
+                    LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
+                    WHERE season like '2015/2016' and goal is not null
+                    LIMIT 1000;""", conn)
+    print("2. Got test data succssefully")
     return data
 
 
@@ -70,6 +123,7 @@ def get_data():
 def drop_features(data):
     features_to_drop = ['league_name', 'season', 'shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     data.drop(features_to_drop, axis='columns', inplace=True)
+    print("3. features were succssefully dropen")
     return data
 
 
@@ -132,7 +186,7 @@ def create_goal_var(data):
             data['target'] = -1
         else:
             data['target'] = 0
-    return data
+    return data['target']
 
 
 # This method adds missing categorials values
@@ -161,8 +215,6 @@ def best_params_model(model, X, y, grid_variables):
 
 def fit_model(model, data, X, y):
     k_fold = KFold(n_splits=10)
-    accuracy_list = []
-    f1_score_list = []
     f1_max_score = 0
     final_model = None
     for train_index, test_index in k_fold.split(data):
@@ -172,24 +224,26 @@ def fit_model(model, data, X, y):
         test_target = y.iloc[test_index]
         fill_nones(train_predictors, test_predictors)
         model.fit(train_predictors, train_target)
-
         model_prediction = model.predict(test_predictors)
-        accuracy = accuracy_score(test_target, model_prediction)
-        accuracy_list.append(accuracy)
         f1 = f1_score(test_target, model_prediction)
-        f1_score_list.append(f1)
-
         if f1 > f1_max_score:
             f1_max_score = f1
             final_model = model
-    evaluation_params = [accuracy_list, f1_score_list]
-    return final_model, evaluation_params
+    return final_model
 
 
-def print_model_evaluation(evaluation_lists, name):
+def print_model_evaluation(evaluation_list, name):
     print(f'--------{name}-------')
-    print('Accuracy Score: %.3f (%.3f)' % (mean(evaluation_lists[0])))
-    print('F1 Score: %.3f (%.3f)' % (mean(evaluation_lists[1])))
+    print('Accuracy Score: %.3f (%.3f)' % (mean(evaluation_list[0])))
+    print('F1 Score: %.3f (%.3f)' % (mean(evaluation_list[1])))
+
+
+def evaluate_model(model, name, test_predictors, test_target):
+    model_prediction = model.predict(test_predictors)
+    accuracy = accuracy_score(test_target, model_prediction)
+    f1 = f1_score(test_target, model_prediction)
+    print_model_evaluation([accuracy, f1], name)
+
 
 # def convert_xml_to_json_feature(xml):
 #     if xml is None:
@@ -235,13 +289,25 @@ def random_forest_best_model(data, X, y):
     return best_model
 
 
-if __name__ == '__main__':
-    # read data from squlite
-    data = get_data()
+def handle_data(data):
     data = xml_change_values(data)
-    # clean data
-    data = pre_processing(data)
+    # clean data (X)
+    X = pre_processing(data)
     # create goal variable (y)
-    data = create_goal_var(data)
-    # Have the Data as X, y
-    print(data)
+    y = create_goal_var(data)
+    return X, y
+
+
+if __name__ == '__main__':
+    # handle train data
+    X_train, y_train = handle_data(get_train_data())
+    data = [X_train, y_train]
+    # handle test data
+    X_test, y_test = handle_data(get_test_data())
+
+    # train model and find best params for each algorithm
+    radom_forest_model = random_forest_best_model(data, X_train, y_train)
+
+    # predict data with differnet models and evaluate models
+    evaluate_model(radom_forest_model, "Random Forest", X_test, y_test)
+
