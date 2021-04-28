@@ -14,16 +14,19 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 
-categorial_vec = ['h_playSpeed', 'a_playSpeed', 'h_playDribbling', 'a_playDribbling', 'h_playPassing',
-                  'a_playPassing', 'h_playPositioing', 'a_playPositioing', 'h_creationPassing',
+categorial_vec = ['league_name', 'season', 'h_playSpeed', 'a_playSpeed', 'h_playDribbling', 'a_playDribbling',
+                  'h_playPassing', 'a_playPassing', 'h_playPositioing', 'a_playPositioing', 'h_creationPassing',
                   'a_creationPassing', 'h_creationCrossing', 'a_creationCrossing', 'h_creationShooting',
                   'a_creationShooting', 'h_creationPositioing', 'a_creationPositioing', 'h_defencePressure',
                   'a_defencePressure', 'h_defenceAggression', 'a_defenceAggression', 'h_defenceTeamWidth',
                   'a_defenceTeamWidth', 'h_defenceDefenderLine', 'a_defenceDefenderLine']
 
+# TODO: update array
+numerical_vec = []
 
 # get train data from sqlite
 def get_train_data():
+    #    conn = sqlite3.connect('/content/drive/MyDrive/Colab Notebooks/database.sqlite')
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id AS match_id,
                             League.name AS league_name, 
@@ -69,13 +72,14 @@ def get_train_data():
                     LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
                     LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
                     WHERE season not like '2015/2016' and goal is not null
-                    LIMIT 50000;""", conn)
+                    LIMIT 500;""", conn)
     print("Got train data succssefully")
     return data
 
 
 # get test data from sqlite
 def get_test_data():
+#    conn = sqlite3.connect('/content/drive/MyDrive/Colab Notebooks/database.sqlite')
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id AS match_id,
                             League.name AS league_name, 
@@ -121,7 +125,7 @@ def get_test_data():
                     LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
                     LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
                     WHERE season like '2015/2016' and goal is not null
-                    LIMIT 50000;""", conn)
+                    LIMIT 500;""", conn)
     print("Got test data succssefully")
     return data
 
@@ -141,26 +145,10 @@ def xml_change_values(data):
     print("xml data was succssefully converted")
     return data
 
-# def convert_xml_to_json_feature(xml):
-#     if xml is None:
-#         return json.dumps({})
-#
-#     json_xml = xmltodict.parse(xml)
-#     json_feature = json.dumps(json_xml)
-#     return json_feature
-#
-#
-# def xml_change_values(data):
-#     features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
-#     for feature in features:
-#         data[[feature]] = data[[feature]].apply(lambda x: convert_xml_to_json_feature(x[feature]), axis=1,
-#                                             result_type='broadcast')
-#     return data
-
 
 # This method drop unnecessary features
 def drop_features(data):
-    features_to_drop = ['league_name', 'season', 'shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+    features_to_drop = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     data.drop(features_to_drop, axis='columns', inplace=True)
     print("features were succssefully droped")
     return data
@@ -176,18 +164,16 @@ def clean_na(data):
             print(data[col].count())
             data.drop(col, axis='columns', inplace=True)
     # Clean all row that have more then 5 features with None values.
-    data.dropna(thresh=5, inplace=True)
+    data.dropna(thresh=7, inplace=True)
     print("data was succssefully cleaned")
     return data
 
 
 # This method detects outlier records
+# TODO: change numeric into columns names
 def clean_outlier(data):
-    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
-    for col in data.columns:
-        if data[col].dtypes in numerics:
-            data = data[np.abs(data[col]-data[col].mean()) <= (3*data[col].std())]
-
+    for col in numerical_vec:
+        data[col] = data[np.abs(data[col]-data[col].mean()) <= (3*data[col].std())]
     print("ouliers were succssefully deleted")
     return data
 
@@ -218,9 +204,9 @@ def pre_processing(data):
 def create_goal_var(data):
     data['target'] = data.apply(lambda _: '', axis=1)
     for index, row in data.iterrows():
-        if row['home_team_goal'] > row['away_team_goal']:
+        if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
             data['target'] = 1
-        elif row['home_team_goal'] < row['away_team_goal']:
+        elif data.iloc[index]['home_team_goal'] < data.iloc[index]['away_team_goal']:
             data['target'] = -1
         else:
             data['target'] = 0
@@ -276,7 +262,8 @@ def fit_model(model, data, X_train_, y_train_):
         y_train = y_train_.iloc[train_index]
         X_test = X_train_.iloc[test_index, :]
         y_test = y_train_.iloc[test_index]
-        X_train, X_test = fill_nones(X_train, X_test)
+        # TODO: Check this
+        # X_train, X_test = fill_nones(X_train, X_test)
         model.fit(X_train, y_train)
         model_prediction = model.predict(X_test)
         f1 = f1_score(y_test, model_prediction, average='weighted', labels=np.unique(model_prediction))
@@ -306,7 +293,7 @@ def evaluate_model(model, name, X_test, y_test):
 
 
 # Random Forest
-def random_forest(data, X_train, y_train,  X_test, y_test):
+def random_forest(data, X_train, y_train, X_test, y_test):
     model = RandomForestClassifier()
     n_estimators = [10, 20, 30] + [i for i in range(45, 105, 5)]
     max_depth = [2, 4, 8, 16, 32, 64]
@@ -317,7 +304,7 @@ def random_forest(data, X_train, y_train,  X_test, y_test):
 
 
 def handle_data(data):
-    # data = xml_change_values(data)
+    data = xml_change_values(data)
     # clean data (X)
     X = pre_processing(data)
     # create goal variable (y)
@@ -330,7 +317,7 @@ if __name__ == '__main__':
     X_train, y_train = handle_data(get_train_data())
     data = pd.concat([X_train, y_train], axis=1)
 
-    # handle test data
+    # handle test data (sessons 2015/2016)
     X_test, y_test = handle_data(get_test_data())
 
     random_forest(data, X_train, y_train,  X_test, y_test)
