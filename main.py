@@ -14,119 +14,116 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 
-categorial_vec = ['league_name', 'season', 'h_playSpeed', 'a_playSpeed', 'h_playDribbling', 'a_playDribbling',
-                  'h_playPassing', 'a_playPassing', 'h_playPositioing', 'a_playPositioing', 'h_creationPassing',
-                  'a_creationPassing', 'h_creationCrossing', 'a_creationCrossing', 'h_creationShooting',
-                  'a_creationShooting', 'h_creationPositioing', 'a_creationPositioing', 'h_defencePressure',
-                  'a_defencePressure', 'h_defenceAggression', 'a_defenceAggression', 'h_defenceTeamWidth',
-                  'a_defenceTeamWidth', 'h_defenceDefenderLine', 'a_defenceDefenderLine']
+categorial_vec = ['league_name', 'season']
 
 # TODO: update array
-numerical_vec = []
+numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
 
 # get train data from sqlite
 def get_train_data():
     #    conn = sqlite3.connect('/content/drive/MyDrive/Colab Notebooks/database.sqlite')
     conn = sqlite3.connect('database.sqlite')
-    data = pd.read_sql("""SELECT Match.id AS match_id,
-                            League.name AS league_name, 
-                            season, 
-                            stage, 
-                            shoton,
-                            shotoff,
-                            goal,
-                            corner,
-                            foulcommit,
-                            card,
-                            TAH.team_api_id AS home_team_id,
-                            TAA.team_api_id AS away_team_id,
-                            home_team_goal, 
-                            away_team_goal,
-                            TAH.buildUpPlaySpeedClass AS h_playSpeed,
-                            TAH.buildUpPlayDribblingClass AS h_playDribbling,
-                            TAH.buildUpPlayPassingClass AS h_playPassing,
-                            TAH.buildUpPlayPositioningClass AS h_playPositioing,
-                            TAH.chanceCreationPassingClass AS h_creationPassing,
-                            TAH.chanceCreationCrossingClass AS h_creationCrossing,
-                            TAH.chanceCreationShootingClass AS h_creationShooting,
-                            TAH.chanceCreationPositioningClass AS h_creationPositioing,
-                            TAH.defencePressureClass AS h_defencePressure,
-                            TAH.defenceAggressionClass AS h_defenceAggression,
-                            TAH.defenceTeamWidthClass AS h_defenceTeamWidth,
-                            TAH.defenceDefenderLineClass AS h_defenceDefenderLine,
-
-                            TAA.buildUpPlaySpeedClass AS a_playSpeed,
-                            TAA.buildUpPlayDribblingClass AS a_playDribbling,
-                            TAA.buildUpPlayPassingClass AS a_playPassing,
-                            TAA.buildUpPlayPositioningClass AS a_playPositioing,
-                            TAA.chanceCreationPassingClass AS a_creationPassing,
-                            TAA.chanceCreationCrossingClass AS a_creationCrossing,
-                            TAA.chanceCreationShootingClass AS a_creationShooting,
-                            TAA.chanceCreationPositioningClass AS a_creationPositioing,
-                            TAA.defencePressureClass AS 'a_defencePressure',
-                            TAA.defenceAggressionClass AS a_defenceAggression,
-                            TAA.defenceTeamWidthClass AS a_defenceTeamWidth,
-                            TAA.defenceDefenderLineClass AS a_defenceDefenderLine
-                    FROM Match
-                    JOIN League on League.id = Match.league_id
-                    LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
-                    LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
-                    WHERE season not like '2015/2016' and goal is not null
-                    LIMIT 500;""", conn)
+    data = pd.read_sql("""SELECT Match.id, 
+                                            League.name AS league_name, 
+                                            season, 
+                                            stage, 
+                                            shoton,
+                                            shotoff,
+                                            goal,
+                                            corner,
+                                            foulcommit,
+                                            card,
+                                            HTeam.team_api_id AS home_team_id,
+                                            ATeam.team_api_id AS away_team_id,
+                                            home_team_goal, 
+                                            away_team_goal,
+                                            home_player_1, 
+                                            home_player_2,
+                                            home_player_3, 
+                                            home_player_4, 
+                                            home_player_5, 
+                                            home_player_6, 
+                                            home_player_7, 
+                                            home_player_8, 
+                                            home_player_9, 
+                                            home_player_10, 
+                                            home_player_11, 
+                                            away_player_1, 
+                                            away_player_2, 
+                                            away_player_3, 
+                                            away_player_4, 
+                                            away_player_5, 
+                                            away_player_6, 
+                                            away_player_7, 
+                                            away_player_8, 
+                                            away_player_9, 
+                                            away_player_10, 
+                                            away_player_11
+                                    FROM Match
+                                    JOIN League on League.id = Match.league_id
+                                    LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
+                                    LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
+                                    WHERE season not like '2015/2016' and goal is not null
+                                    LIMIT 500;""", conn)
     print("Got train data succssefully")
     return data
 
+def get_player_attributes():
+    conn = sqlite3.connect('database.sqlite')
+    players_data = pd.read_sql("""SELECT player_api_id, overall_rating, potential, stamina
+                        FROM Player_Attributes""", conn)
+
+    print("Got player data succssefully")
+    return players_data
 
 # get test data from sqlite
 def get_test_data():
 #    conn = sqlite3.connect('/content/drive/MyDrive/Colab Notebooks/database.sqlite')
     conn = sqlite3.connect('database.sqlite')
-    data = pd.read_sql("""SELECT Match.id AS match_id,
-                            League.name AS league_name, 
-                            season, 
-                            stage, 
-                            shoton,
-                            shotoff,
-                            goal,
-                            corner,
-                            foulcommit,
-                            card,
-                            TAH.team_api_id AS home_team_id,
-                            TAA.team_api_id AS away_team_id,
-                            home_team_goal, 
-                            away_team_goal,
-                            TAH.buildUpPlaySpeedClass AS h_playSpeed,
-                            TAH.buildUpPlayDribblingClass AS h_playDribbling,
-                            TAH.buildUpPlayPassingClass AS h_playPassing,
-                            TAH.buildUpPlayPositioningClass AS h_playPositioing,
-                            TAH.chanceCreationPassingClass AS h_creationPassing,
-                            TAH.chanceCreationCrossingClass AS h_creationCrossing,
-                            TAH.chanceCreationShootingClass AS h_creationShooting,
-                            TAH.chanceCreationPositioningClass AS h_creationPositioing,
-                            TAH.defencePressureClass AS h_defencePressure,
-                            TAH.defenceAggressionClass AS h_defenceAggression,
-                            TAH.defenceTeamWidthClass AS h_defenceTeamWidth,
-                            TAH.defenceDefenderLineClass AS h_defenceDefenderLine,
-
-                            TAA.buildUpPlaySpeedClass AS a_playSpeed,
-                            TAA.buildUpPlayDribblingClass AS a_playDribbling,
-                            TAA.buildUpPlayPassingClass AS a_playPassing,
-                            TAA.buildUpPlayPositioningClass AS a_playPositioing,
-                            TAA.chanceCreationPassingClass AS a_creationPassing,
-                            TAA.chanceCreationCrossingClass AS a_creationCrossing,
-                            TAA.chanceCreationShootingClass AS a_creationShooting,
-                            TAA.chanceCreationPositioningClass AS a_creationPositioing,
-                            TAA.defencePressureClass AS 'a_defencePressure',
-                            TAA.defenceAggressionClass AS a_defenceAggression,
-                            TAA.defenceTeamWidthClass AS a_defenceTeamWidth,
-                            TAA.defenceDefenderLineClass AS a_defenceDefenderLine
-                    FROM Match
-                    JOIN League on League.id = Match.league_id
-                    LEFT JOIN Team_Attributes AS TAH on TAH.team_api_id = Match.home_team_api_id
-                    LEFT JOIN Team_Attributes AS TAA on TAA.team_api_id = Match.away_team_api_id
-                    WHERE season like '2015/2016' and goal is not null
-                    LIMIT 500;""", conn)
-    print("Got test data succssefully")
+    data = pd.read_sql("""SELECT Match.id, 
+                                            League.name AS league_name, 
+                                            season, 
+                                            stage, 
+                                            shoton,
+                                            shotoff,
+                                            goal,
+                                            corner,
+                                            foulcommit,
+                                            card,
+                                            HTeam.team_api_id AS home_team_id,
+                                            ATeam.team_api_id AS away_team_id,
+                                            home_team_goal, 
+                                            away_team_goal,
+                                            home_player_1, 
+                                            home_player_2,
+                                            home_player_3, 
+                                            home_player_4, 
+                                            home_player_5, 
+                                            home_player_6, 
+                                            home_player_7, 
+                                            home_player_8, 
+                                            home_player_9, 
+                                            home_player_10, 
+                                            home_player_11, 
+                                            away_player_1, 
+                                            away_player_2, 
+                                            away_player_3, 
+                                            away_player_4, 
+                                            away_player_5, 
+                                            away_player_6, 
+                                            away_player_7, 
+                                            away_player_8, 
+                                            away_player_9, 
+                                            away_player_10, 
+                                            away_player_11
+                                    FROM Match
+                                    JOIN League on League.id = Match.league_id
+                                    LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
+                                    LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
+                                    WHERE season like '2015/2016' and goal is not null
+                                    ORDER by date
+                                    LIMIT 500;""", conn)
+    print("Got train data succssefully")
     return data
 
 
@@ -193,7 +190,7 @@ def discritization(data):
 def pre_processing(data):
     data = drop_features(data)
     data = clean_na(data)
-    data = clean_outlier(data)
+    # data = clean_outlier(data)
     data = discritization(data)
     # discritization(clean_outlier(clean_na(drop_features(data))))
     print("pre process was succssefully finished")
@@ -205,11 +202,11 @@ def create_goal_var(data):
     data['target'] = data.apply(lambda _: '', axis=1)
     for index, row in data.iterrows():
         if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
-            data['target'] = 1
+            data.loc[index, 'target'] = 1
         elif data.iloc[index]['home_team_goal'] < data.iloc[index]['away_team_goal']:
-            data['target'] = -1
+            data.loc[index, 'target'] = -1
         else:
-            data['target'] = 0
+            data.loc[index, 'target'] = 0
     print("target data was succssefully created")
     return data['target']
 
@@ -302,14 +299,50 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     best_model = fit_model(best_model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
 
+def get_players_statistics(data, players_data):
+
+    data['home_team_potential'] = data.apply(lambda _: '', axis=1)
+    data['away_team_potential'] = data.apply(lambda _: '', axis=1)
+    data['home_team_stamina'] = data.apply(lambda _: '', axis=1)
+    data['away_team_stamina'] = data.apply(lambda _: '', axis=1)
+    data['home_team_overall'] = data.apply(lambda _: '', axis=1)
+    data['away_team_overall'] = data.apply(lambda _: '', axis=1)
+
+    for index, row in data.iterrows():
+        home_team_potential = 0
+        away_team_potential = 0
+        home_team_stamina = 0
+        away_team_stamina = 0
+        home_team_overall = 0
+        away_team_overall = 0
+        for i in range(11):
+            home_player_id = data.iloc['home_player_' + (i+1)]
+            home_team_potential += players_data[home_player_id, 'potential']
+            home_team_stamina += players_data[home_player_id, 'stamina']
+            home_team_overall += players_data[home_player_id, 'overall']
+
+            away_player_id = data.iloc['away_player_' + (i+1)]
+            away_team_potential += players_data[away_player_id, 'potential']
+            away_team_stamina += players_data[away_player_id, 'stamina']
+            away_team_overall += players_data[away_player_id, 'overall']
+
+        data.loc[index, 'home_team_potential'] = home_team_potential
+        data.loc[index, 'home_team_stamina'] = home_team_stamina
+        data.loc[index, 'home_team_overall'] = home_team_overall
+        data.loc[index, 'away_team_potential'] = away_team_potential
+        data.loc[index, 'away_team_stamina'] = away_team_stamina
+        data.loc[index, 'away_team_overall'] = away_team_overall
+
 
 def handle_data(data):
-    data = xml_change_values(data)
+    # data = xml_change_values(data)
     # clean data (X)
     X = pre_processing(data)
     # create goal variable (y)
     y = create_goal_var(X)
     return X, y
+
+
 
 
 if __name__ == '__main__':
