@@ -25,6 +25,7 @@ def get_train_data():
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id, 
                                             League.name AS league_name, 
+                                            date,
                                             season, 
                                             stage, 
                                             shoton,
@@ -70,11 +71,25 @@ def get_train_data():
 
 def get_player_attributes():
     conn = sqlite3.connect('database.sqlite')
-    players_data = pd.read_sql("""SELECT player_api_id, overall_rating, potential, stamina
+    players_data = pd.read_sql("""SELECT player_api_id,date, overall_rating, potential, stamina
                         FROM Player_Attributes""", conn)
 
+    # avg all records for each player
+
+    grouped_players_data = players_data.groupby('player_api_id').agg('mean').round(0)
+
+    # player_id = data.iloc[0]['player_api_id']
+    # player_overall_rating = data.iloc[0]['overall_rating']
+    # player_potential = data.iloc[0]['potential']
+    # player_stamina = data.iloc[0]['stamina']
+    #
+    # for index, row in players_data.iterrows():
+    #     player_id = data.iloc[0]['home_player_api_id']
+    #     if
+    #     player_id = data.iloc[index]['home_player_' + str(i+1)]
+    #     if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
     print("Got player data succssefully")
-    return players_data
+    return grouped_players_data
 
 # get test data from sqlite
 def get_test_data():
@@ -190,8 +205,10 @@ def discritization(data):
 def pre_processing(data):
     data = drop_features(data)
     data = clean_na(data)
-    # data = clean_outlier(data)
-    data = discritization(data)
+    #TODO: problems in clean_outlier(data), discritization(data)
+    #data = clean_outlier(data)
+    #data = discritization(data)
+    data = get_players_statistics(data, get_player_attributes())
     # discritization(clean_outlier(clean_na(drop_features(data))))
     print("pre process was succssefully finished")
     return data
@@ -315,23 +332,31 @@ def get_players_statistics(data, players_data):
         away_team_stamina = 0
         home_team_overall = 0
         away_team_overall = 0
+        num_h_players = 11
+        num_a_players = 11
         for i in range(11):
-            home_player_id = data.iloc['home_player_' + (i+1)]
-            home_team_potential += players_data[home_player_id, 'potential']
-            home_team_stamina += players_data[home_player_id, 'stamina']
-            home_team_overall += players_data[home_player_id, 'overall']
+            home_player_id = data.iloc[index]['home_player_' + str(i+1)]
+            if home_player_id is np.NaN:
+                num_h_players -= 1
+            else:
+                home_team_potential += players_data.at[home_player_id, 'potential']
+                home_team_stamina += players_data.at[home_player_id, 'stamina']
+                home_team_overall += players_data.at[home_player_id, 'overall_rating']
 
-            away_player_id = data.iloc['away_player_' + (i+1)]
-            away_team_potential += players_data[away_player_id, 'potential']
-            away_team_stamina += players_data[away_player_id, 'stamina']
-            away_team_overall += players_data[away_player_id, 'overall']
+            away_player_id = data.iloc[index]['away_player_' + str(i+1)]
+            if away_player_id is np.NaN:
+                num_a_players -= 1
+            else:
+                away_team_potential += players_data.at[away_player_id, 'potential']
+                away_team_stamina += players_data.at[away_player_id, 'stamina']
+                away_team_overall += players_data.at[away_player_id, 'overall_rating']
 
-        data.loc[index, 'home_team_potential'] = home_team_potential
-        data.loc[index, 'home_team_stamina'] = home_team_stamina
-        data.loc[index, 'home_team_overall'] = home_team_overall
-        data.loc[index, 'away_team_potential'] = away_team_potential
-        data.loc[index, 'away_team_stamina'] = away_team_stamina
-        data.loc[index, 'away_team_overall'] = away_team_overall
+        data.loc[index, 'home_team_potential'] = (home_team_potential/num_h_players).round(0)
+        data.loc[index, 'home_team_stamina'] = (home_team_stamina/num_h_players).round(0)
+        data.loc[index, 'home_team_overall'] = (home_team_overall/num_h_players).round(0)
+        data.loc[index, 'away_team_potential'] = (away_team_potential/num_a_players).round(0)
+        data.loc[index, 'away_team_stamina'] = (away_team_stamina/num_a_players).round(0)
+        data.loc[index, 'away_team_overall'] = (away_team_overall/num_a_players).round(0)
 
 
 def handle_data(data):
@@ -340,6 +365,7 @@ def handle_data(data):
     X = pre_processing(data)
     # create goal variable (y)
     y = create_goal_var(X)
+
     return X, y
 
 
