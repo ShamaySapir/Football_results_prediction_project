@@ -13,10 +13,12 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 
+
 categorial_vec = ['league_name', 'season']
 
-# TODO: update array
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
+
+
 
 # get train data from sqlite
 def get_train_data():
@@ -64,6 +66,7 @@ def get_train_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
                                     LIMIT 500;""", conn)
+
     print("Got train data succssefully")
     return data
 
@@ -71,9 +74,9 @@ def get_player_attributes():
     conn = sqlite3.connect('database.sqlite')
     players_data = pd.read_sql("""SELECT player_api_id, overall_rating, potential, stamina
                         FROM Player_Attributes""", conn)
-
     print("Got player data succssefully")
     return players_data
+
 
 # get test data from sqlite
 def get_test_data():
@@ -135,6 +138,7 @@ def convert_xml_to_json_feature(xml,feature):
     return json_xml
 
 
+
 def xml_change_values(data):
     features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     for feature in features:
@@ -143,12 +147,14 @@ def xml_change_values(data):
     return data
 
 
+
 # This method drop unnecessary features
 def drop_features(data):
     features_to_drop = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     data.drop(features_to_drop, axis='columns', inplace=True)
     print("features were succssefully droped")
     return data
+
 
 
 # This method clean none values
@@ -190,9 +196,11 @@ def discritization(data):
 def pre_processing(data):
     data = drop_features(data)
     data = clean_na(data)
+
     # data = clean_outlier(data)
     # data = discritization(data)
     data = get_players_statistics(data,get_player_attributes())
+
     # discritization(clean_outlier(clean_na(drop_features(data))))
     print("pre process was succssefully finished")
     return data
@@ -233,6 +241,26 @@ def add_numerical_missing_values(data, col, value):
     data[col].fillna(value, inplace=True)
 
 
+
+def fill_nones(train, test):
+    # numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    for col in train.columns:
+        # if train[col].dtypes in numerics:
+        #     mean = train[col].mean()
+        #     add_numerical_missing_values(train, col, mean)
+        #     add_numerical_missing_values(test, col, mean)
+        # else:
+        print(train.apply(lambda x: sum(x.isnull()), axis=0))
+        best = train[col].mode()[0]
+        add_categorial_missing_values(train, col, best)
+        print(train.apply(lambda x: sum(x.isnull()), axis=0))
+        add_categorial_missing_values(test, col, best)
+
+
+    print("nones were succssefully imputed")
+    print(train)
+
+
 def fill_nones(train, test):
     # numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
     for col in train.columns:
@@ -249,6 +277,7 @@ def fill_nones(train, test):
 
     print("nones were succssefully imputed")
     print(train)
+
 
 
 def fit_model(model, data, X_train_, y_train_):
@@ -337,19 +366,14 @@ def get_players_statistics(data, players_data):
 
 
 
-
-
-
-
 def handle_data(data):
     data = xml_change_values(data)
     # clean data (X)
-    # X = pre_processing(data)
+    X = pre_processing(data)
     # create goal variable (y)
     y = create_goal_var(X)
 
-
-
+    return X, y
 
 
 
