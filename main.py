@@ -5,7 +5,6 @@ import sys
 import sqlite3
 import pandas as pd
 import numpy as np
-from matplotlib import pyplot
 from sklearn.preprocessing import LabelEncoder
 from numpy.core import mean
 from sklearn.model_selection import KFold
@@ -14,9 +13,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 
-categorial_vec = ['league_name', 'season']
 
-# TODO: update array
+categorial_vec = ['league_name', 'season']
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
 
 # get train data from sqlite
@@ -69,25 +67,13 @@ def get_train_data():
     print("Got train data succssefully")
     return data
 
+
 def get_player_attributes():
     conn = sqlite3.connect('database.sqlite')
     players_data = pd.read_sql("""SELECT player_api_id,date, overall_rating, potential, stamina
                         FROM Player_Attributes""", conn)
-
     # avg all records for each player
-
     grouped_players_data = players_data.groupby('player_api_id').agg('mean').round(0)
-
-    # player_id = data.iloc[0]['player_api_id']
-    # player_overall_rating = data.iloc[0]['overall_rating']
-    # player_potential = data.iloc[0]['potential']
-    # player_stamina = data.iloc[0]['stamina']
-    #
-    # for index, row in players_data.iterrows():
-    #     player_id = data.iloc[0]['home_player_api_id']
-    #     if
-    #     player_id = data.iloc[index]['home_player_' + str(i+1)]
-    #     if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
     print("Got player data succssefully")
     return grouped_players_data
 
@@ -142,20 +128,23 @@ def get_test_data():
     return data
 
 
-def convert_xml_to_json_feature(xml):
+def convert_xml_to_json_feature(xml,feature):
     json_xml = np.NaN
     if xml is not None:
         dict_xml = xmltodict.parse(xml)
+        dict_val = dict_xml[feature]["value"]
         json_xml = json.dumps(dict_xml)
     return json_xml
+
 
 
 def xml_change_values(data):
     features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     for feature in features:
-        data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x))
+        data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x,feature))
     print("xml data was succssefully converted")
     return data
+
 
 
 # This method drop unnecessary features
@@ -164,6 +153,7 @@ def drop_features(data):
     data.drop(features_to_drop, axis='columns', inplace=True)
     print("features were succssefully droped")
     return data
+
 
 
 # This method clean none values
@@ -205,11 +195,13 @@ def discritization(data):
 def pre_processing(data):
     data = drop_features(data)
     data = clean_na(data)
+
     #TODO: problems in clean_outlier(data), discritization(data)
     #data = clean_outlier(data)
     #data = discritization(data)
     data = get_players_statistics(data, get_player_attributes())
     # discritization(clean_outlier(clean_na(drop_features(data))))
+
     print("pre process was succssefully finished")
     return data
 
@@ -249,6 +241,26 @@ def add_numerical_missing_values(data, col, value):
     data[col].fillna(value, inplace=True)
 
 
+
+def fill_nones(train, test):
+    # numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    for col in train.columns:
+        # if train[col].dtypes in numerics:
+        #     mean = train[col].mean()
+        #     add_numerical_missing_values(train, col, mean)
+        #     add_numerical_missing_values(test, col, mean)
+        # else:
+        print(train.apply(lambda x: sum(x.isnull()), axis=0))
+        best = train[col].mode()[0]
+        add_categorial_missing_values(train, col, best)
+        print(train.apply(lambda x: sum(x.isnull()), axis=0))
+        add_categorial_missing_values(test, col, best)
+
+
+    print("nones were succssefully imputed")
+    print(train)
+
+
 def fill_nones(train, test):
     # numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
     for col in train.columns:
@@ -265,6 +277,7 @@ def fill_nones(train, test):
 
     print("nones were succssefully imputed")
     print(train)
+
 
 
 def fit_model(model, data, X_train_, y_train_):
@@ -367,9 +380,6 @@ def handle_data(data):
     y = create_goal_var(X)
 
     return X, y
-
-
-
 
 if __name__ == '__main__':
     # handle train data
