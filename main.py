@@ -133,7 +133,7 @@ def convert_xml_to_json_feature(xml,feature):
     json_xml = np.NaN
     if xml is not None:
         dict_xml = xmltodict.parse(xml)
-        dict_val = dict_xml[feature]["value"]
+        # dict_val = dict_xml[feature]["value"]
         json_xml = json.dumps(dict_xml)
     return json_xml
 
@@ -143,6 +143,9 @@ def xml_change_values(data):
     features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     for feature in features:
         data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x,feature))
+        if feature == "shoton":
+            handle_shot_on(data)
+
     print("xml data was succssefully converted")
     return data
 
@@ -363,8 +366,50 @@ def get_players_statistics(data, players_data):
         data.loc[index, 'away_team_stamina'] = away_team_stamina
         data.loc[index, 'away_team_overall'] = away_team_overall
 
+def handle_shot_on(data):
 
+    ## iterate over the data table after the xml function turend each col into json string
 
+    for index,rows in data.iterrows():
+
+        ## counters for  each col
+
+        home_team_shoot_on = 0
+        away_team_shoot_on = 0
+
+        ## this row change to value of the json string into a dict or a list of dicts depends on how many
+        ## shot on record there was in the match if we had one event its a dict,else its a list of dicts
+
+        curr_dict = json.loads(data.iloc[index]["shoton"])["shoton"]["value"]
+
+        ## if it a list of dict
+
+        if type(curr_dict) is list:
+
+            #iterate over the list
+            for shoton in curr_dict:
+
+                ## check if the team value in the xml dict match the home id col or the away to
+                ## update the counters accordingly
+                if float(shoton["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_shoot_on += float(1)
+                elif float(shoton["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_shoot_on += float(1)
+
+            ## set the new col of the home and away shot in the data dataframe
+            data.loc[index, 'home_shoton'] = home_team_shoot_on
+            data.loc[index, 'away_shoton'] = away_team_shoot_on
+
+        ## if it a single dict
+        else:
+            ## same logic guest without a loop
+            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                home_team_shoot_on += float(1)
+            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                away_team_shoot_on += float(1)
+
+            data.loc[index, 'home_shoton'] = home_team_shoot_on
+            data.loc[index, 'away_shoton'] = away_team_shoot_on
 
 def handle_data(data):
     data = xml_change_values(data)
