@@ -69,7 +69,7 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 400000;""", conn)
+                                    LIMIT 40000;""", conn)
 
     print("Got train data succssefully")
     return data
@@ -130,7 +130,7 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 400000;""", conn)
+                                    LIMIT 40000;""", conn)
     print("Got test data succssefully")
     return data
 
@@ -373,7 +373,6 @@ def random_forest(data, X_train, y_train, X_test, y_test):
 
 # Logistic Regression
 def logistic_regression(data, X_train, y_train, X_test, y_test):
-    model = RandomForestClassifier()
     model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
     model.fit(X_train, y_train)
     evaluate_model(model, "Logistic Regression", X_test, y_test)
@@ -715,7 +714,7 @@ def handle_foulcommit(data):
 
 
 def handle_data(data):
-    # data = xml_change_values(data)
+    data = xml_change_values(data)
     # clean data (X)
     X = pre_processing(data)
     # create goal variable (y)
@@ -733,4 +732,5 @@ if __name__ == '__main__':
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
 
+    # random_forest(train_data, X_train, y_train,  X_test, y_test)
     logistic_regression(train_data, X_train, y_train,  X_test, y_test)
