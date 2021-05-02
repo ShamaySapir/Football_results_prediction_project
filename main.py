@@ -728,4 +728,5 @@ if __name__ == '__main__':
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
 
-    random_forest(train_data, X_train, y_train,  X_test, y_test)
+    # random_forest(train_data, X_train, y_train,  X_test, y_test)
+    CART(X_train, y_train, X_test, y_test)
