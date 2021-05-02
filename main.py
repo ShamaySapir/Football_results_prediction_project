@@ -15,6 +15,7 @@ from sklearn.ensemble import RandomForestClassifier
 # from sklearn.tree import DecisionTreeClassifier, export_graphviz
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
+from sklearn import tree
 
 
 categorial_vec = ['league_name', 'season']
@@ -365,6 +366,12 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     # best_model = best_params_model(model, X_train, y_train, grid_variables)
     best_model = fit_model(model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
+
+# CART
+def CART(X_train, y_train, X_test, y_test):
+    model = tree.DecisionTreeClassifier()
+    best_model = model.fit(X_train, y_train)
+    evaluate_model(best_model, "CART", X_test, y_test)
 
 def get_players_statistics(data, players_data):
 
