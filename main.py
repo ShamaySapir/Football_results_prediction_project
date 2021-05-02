@@ -7,7 +7,7 @@ import sys
 import sqlite3
 import pandas as pd
 import numpy as np
-from sklearn import metrics
+from sklearn import metrics, svm
 from sklearn.preprocessing import LabelEncoder
 from numpy.core import mean
 from sklearn.model_selection import KFold
@@ -15,6 +15,7 @@ from sklearn.ensemble import RandomForestClassifier
 # from sklearn.tree import DecisionTreeClassifier, export_graphviz
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
+from sklearn import tree
 
 # imports for logistic regression
 from sklearn.linear_model import LogisticRegression
@@ -371,11 +372,22 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     best_model = fit_model(model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
 
+
+
 # Logistic Regression
 def logistic_regression(data, X_train, y_train, X_test, y_test):
     model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
     model.fit(X_train, y_train)
     evaluate_model(model, "Logistic Regression", X_test, y_test)
+
+
+# CART
+def CART(X_train, y_train, X_test, y_test):
+    model = tree.DecisionTreeClassifier()
+    best_model = model.fit(X_train, y_train)
+    evaluate_model(best_model, "CART", X_test, y_test)
+
+
 
 def get_players_statistics(data, players_data):
 
@@ -713,6 +725,44 @@ def handle_foulcommit(data):
                 continue
 
 
+def linear_svm(X_train, y_train, X_test, y_test):
+
+    kernel = ["linear", "poly", "rbf", "sigmoid", "precomputed"]
+    choosen_model = ""
+    f_max_score = 0
+
+    for ker in kernel:
+
+        clf = svm.SVC(kernel=ker)
+
+        # Train the model using the training sets
+        clf.fit(X_train, y_train)
+
+        # Predict the response for test dataset
+        y_pred = clf.predict(X_test)
+
+        curr_f = metrics.accuracy_score(y_test, y_pred)
+
+        if curr_f > f_max_score:
+            f_max_score = curr_f
+            choosen_model = ker
+
+    clf = svm.SVC(kernel=choosen_model)
+
+    # Train the model using the training sets
+    clf.fit(X_train, y_train)
+
+    # Predict the response for test dataset
+    y_pred = clf.predict(X_test)
+
+    curr_f = metrics.accuracy_score(y_test, y_pred)
+
+    if curr_f > f_max_score:
+        f_max_score = curr_f
+        choosen_model = ker
+
+    evaluate_model(clf,"SVM",X_test,y_pred)
+
 def handle_data(data):
     data = xml_change_values(data)
     # clean data (X)
@@ -731,6 +781,7 @@ if __name__ == '__main__':
 
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
-
-    # random_forest(train_data, X_train, y_train,  X_test, y_test)
     logistic_regression(train_data, X_train, y_train,  X_test, y_test)
+    random_forest(train_data, X_train, y_train,  X_test, y_test)
+    CART(X_train, y_train, X_test, y_test)
+    linear_svm(X_train, y_train,  X_test, y_test)
