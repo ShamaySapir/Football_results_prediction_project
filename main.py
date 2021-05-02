@@ -17,10 +17,7 @@ from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, tra
 
 
 categorial_vec = ['league_name', 'season']
-
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
-
-
 
 # get train data from sqlite
 def get_train_data():
@@ -67,18 +64,19 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 500;""", conn)
-
+                                    LIMIT 1000;""", conn)
     print("Got train data succssefully")
     return data
 
+
 def get_player_attributes():
     conn = sqlite3.connect('database.sqlite')
-    players_data = pd.read_sql("""SELECT player_api_id, overall_rating, potential, stamina
+    players_data = pd.read_sql("""SELECT player_api_id,date, overall_rating, potential, stamina
                         FROM Player_Attributes""", conn)
+    # avg all records for each player
+    grouped_players_data = players_data.groupby('player_api_id').agg('mean').round(0)
     print("Got player data succssefully")
-    return players_data
-
+    return grouped_players_data
 
 # get test data from sqlite
 def get_test_data():
@@ -126,8 +124,8 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 500;""", conn)
-    print("Got train data succssefully")
+                                    LIMIT 1000;""", conn)
+    print("Got test data succssefully")
     return data
 
 
@@ -135,7 +133,6 @@ def convert_xml_to_json_feature(xml,feature):
     json_xml = np.NaN
     if xml is not None:
         dict_xml = xmltodict.parse(xml)
-        # dict_val = dict_xml[feature]["value"]
         json_xml = json.dumps(dict_xml)
     return json_xml
 
@@ -162,10 +159,8 @@ def xml_change_values(data):
     return data
 
 
-
 # This method drop unnecessary features
-def drop_features(data):
-    features_to_drop = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+def drop_features(data, features_to_drop):
     data.drop(features_to_drop, axis='columns', inplace=True)
     print("features were succssefully droped")
     return data
@@ -209,21 +204,32 @@ def discritization(data):
 # clean the data from none values and outliers,
 # also does a disritization for relevant features
 def pre_processing(data):
-    data = drop_features(data)
+    features_to_drop = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+    data = drop_features(data, features_to_drop)
     data = clean_na(data)
 
-    # data = clean_outlier(data)
-    # data = discritization(data)
-    data = get_players_statistics(data,get_player_attributes())
+    #TODO: problems in clean_outlier(data), discritization(data)
+    #data = clean_outlier(data)
+    data = discritization(data)
+    data = get_players_statistics(data, get_player_attributes())
+
+    players = []
+    for i in range(11):
+        players.append('home_player_' + str(i+1))
+        players.append('away_player_' + str(i+1))
+
+    data = drop_features(data, players)
 
     # discritization(clean_outlier(clean_na(drop_features(data))))
+
     print("pre process was succssefully finished")
     return data
 
 
 # This method creates the goal variable of the data
+#TODO: change types
 def create_goal_var(data):
-    data['target'] = data.apply(lambda _: '', axis=1)
+    data['target'] = data.apply(lambda _: 0, axis=1)
     for index, row in data.iterrows():
         if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
             data.loc[index, 'target'] = 1
@@ -346,12 +352,12 @@ def random_forest(data, X_train, y_train, X_test, y_test):
 
 def get_players_statistics(data, players_data):
 
-    data['home_team_potential'] = data.apply(lambda _: '', axis=1)
-    data['away_team_potential'] = data.apply(lambda _: '', axis=1)
-    data['home_team_stamina'] = data.apply(lambda _: '', axis=1)
-    data['away_team_stamina'] = data.apply(lambda _: '', axis=1)
-    data['home_team_overall'] = data.apply(lambda _: '', axis=1)
-    data['away_team_overall'] = data.apply(lambda _: '', axis=1)
+    # data['home_team_potential'] = data.apply(lambda _: '', axis=1)
+    # data['away_team_potential'] = data.apply(lambda _: '', axis=1)
+    # data['home_team_stamina'] = data.apply(lambda _: '', axis=1)
+    # data['away_team_stamina'] = data.apply(lambda _: '', axis=1)
+    # data['home_team_overall'] = data.apply(lambda _: '', axis=1)
+    # data['away_team_overall'] = data.apply(lambda _: '', axis=1)
 
     for index, row in data.iterrows():
         home_team_potential = 0
@@ -360,23 +366,34 @@ def get_players_statistics(data, players_data):
         away_team_stamina = 0
         home_team_overall = 0
         away_team_overall = 0
+        num_h_players = 11
+        num_a_players = 11
         for i in range(11):
-            home_player_id = data.iloc['home_player_' + (i+1)]
-            home_team_potential += players_data[home_player_id, 'potential']
-            home_team_stamina += players_data[home_player_id, 'stamina']
-            home_team_overall += players_data[home_player_id, 'overall']
+            home_player_id = data.iloc[index]['home_player_' + str(i+1)]
+            if math.isnan(home_player_id):
+                num_h_players -= 1
+            else:
+                home_team_potential += players_data.at[home_player_id, 'potential']
+                home_team_stamina += players_data.at[home_player_id, 'stamina']
+                home_team_overall += players_data.at[home_player_id, 'overall_rating']
 
-            away_player_id = data.iloc['away_player_' + (i+1)]
-            away_team_potential += players_data[away_player_id, 'potential']
-            away_team_stamina += players_data[away_player_id, 'stamina']
-            away_team_overall += players_data[away_player_id, 'overall']
+            away_player_id = data.iloc[index]['away_player_' + str(i+1)]
+            if math.isnan(away_player_id):
+                num_a_players -= 1
+            else:
+                away_team_potential += players_data.at[away_player_id, 'potential']
+                away_team_stamina += players_data.at[away_player_id, 'stamina']
+                away_team_overall += players_data.at[away_player_id, 'overall_rating']
 
-        data.loc[index, 'home_team_potential'] = home_team_potential
-        data.loc[index, 'home_team_stamina'] = home_team_stamina
-        data.loc[index, 'home_team_overall'] = home_team_overall
-        data.loc[index, 'away_team_potential'] = away_team_potential
-        data.loc[index, 'away_team_stamina'] = away_team_stamina
-        data.loc[index, 'away_team_overall'] = away_team_overall
+        data.loc[index, 'home_team_potential'] = (home_team_potential/num_h_players).round(0)
+        data.loc[index, 'home_team_stamina'] = (home_team_stamina/num_h_players).round(0)
+        data.loc[index, 'home_team_overall'] = (home_team_overall/num_h_players).round(0)
+        data.loc[index, 'away_team_potential'] = (away_team_potential/num_a_players).round(0)
+        data.loc[index, 'away_team_stamina'] = (away_team_stamina/num_a_players).round(0)
+        data.loc[index, 'away_team_overall'] = (away_team_overall/num_a_players).round(0)
+
+    return data
+
 
 def handle_shot_on(data):
 
@@ -536,6 +553,7 @@ def handle_corner(data):
             data.loc[index, 'home_corner'] = home_team_corner
             data.loc[index, 'away_corner'] = away_team_corner
 
+
 def handle_data(data):
     data = xml_change_values(data)
     # clean data (X)
@@ -544,8 +562,6 @@ def handle_data(data):
     y = create_goal_var(X)
 
     return X, y
-
-
 
 if __name__ == '__main__':
     # handle train data
@@ -556,4 +572,3 @@ if __name__ == '__main__':
     X_test, y_test = handle_data(get_test_data())
 
     random_forest(data, X_train, y_train,  X_test, y_test)
-
