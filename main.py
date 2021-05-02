@@ -16,6 +16,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 
+# imports for logistic regression
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix
+
 
 categorial_vec = ['league_name', 'season']
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
@@ -65,7 +69,7 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 50000;""", conn)
+                                    LIMIT 500;""", conn)
     print("Got train data succssefully")
     return data
 
@@ -125,7 +129,7 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 50000;""", conn)
+                                    LIMIT 500;""", conn)
     print("Got test data succssefully")
     return data
 
@@ -365,6 +369,13 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     # best_model = best_params_model(model, X_train, y_train, grid_variables)
     best_model = fit_model(model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
+
+# Logistic Regression
+def logistic_regression(data, X_train, y_train, X_test, y_test):
+    model = RandomForestClassifier()
+    model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
+    model.fit(X_train, y_train)
+    evaluate_model(model, "Logistic Regression", X_test, y_test)
 
 def get_players_statistics(data, players_data):
 
@@ -703,7 +714,7 @@ def handle_foulcommit(data):
 
 
 def handle_data(data):
-    data = xml_change_values(data)
+    # data = xml_change_values(data)
     # clean data (X)
     X = pre_processing(data)
     # create goal variable (y)
@@ -721,4 +732,4 @@ if __name__ == '__main__':
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
 
-    random_forest(train_data, X_train, y_train,  X_test, y_test)
+    logistic_regression(train_data, X_train, y_train,  X_test, y_test)
