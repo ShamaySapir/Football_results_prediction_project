@@ -7,7 +7,7 @@ import sys
 import sqlite3
 import pandas as pd
 import numpy as np
-from sklearn import metrics
+from sklearn import metrics, svm
 from sklearn.preprocessing import LabelEncoder
 from numpy.core import mean
 from sklearn.model_selection import KFold
@@ -66,7 +66,7 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 50000;""", conn)
+                                    LIMIT 400000;""", conn)
     print("Got train data succssefully")
     return data
 
@@ -126,7 +126,7 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 50000;""", conn)
+                                    LIMIT 400000;""", conn)
     print("Got test data succssefully")
     return data
 
@@ -709,6 +709,44 @@ def handle_foulcommit(data):
                 continue
 
 
+def linear_svm(X_train, y_train, X_test, y_test):
+
+    kernel = ["linear", "poly", "rbf", "sigmoid", "precomputed"]
+    choosen_model = ""
+    f_max_score = 0
+
+    for ker in kernel:
+
+        clf = svm.SVC(kernel=ker)
+
+        # Train the model using the training sets
+        clf.fit(X_train, y_train)
+
+        # Predict the response for test dataset
+        y_pred = clf.predict(X_test)
+
+        curr_f = metrics.accuracy_score(y_test, y_pred)
+
+        if curr_f > f_max_score:
+            f_max_score = curr_f
+            choosen_model = ker
+
+    clf = svm.SVC(kernel=choosen_model)
+
+    # Train the model using the training sets
+    clf.fit(X_train, y_train)
+
+    # Predict the response for test dataset
+    y_pred = clf.predict(X_test)
+
+    curr_f = metrics.accuracy_score(y_test, y_pred)
+
+    if curr_f > f_max_score:
+        f_max_score = curr_f
+        choosen_model = ker
+
+    evaluate_model(clf,"SVM",X_test,y_pred)
+
 def handle_data(data):
     data = xml_change_values(data)
     # clean data (X)
@@ -728,5 +766,6 @@ if __name__ == '__main__':
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
 
-    # random_forest(train_data, X_train, y_train,  X_test, y_test)
+    random_forest(train_data, X_train, y_train,  X_test, y_test)
     CART(X_train, y_train, X_test, y_test)
+    linear_svm(X_train, y_train,  X_test, y_test)
