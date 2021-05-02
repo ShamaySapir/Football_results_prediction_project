@@ -7,6 +7,7 @@ import sys
 import sqlite3
 import pandas as pd
 import numpy as np
+from sklearn import metrics
 from sklearn.preprocessing import LabelEncoder
 from numpy.core import mean
 from sklearn.model_selection import KFold
@@ -129,7 +130,7 @@ def get_test_data():
     return data
 
 
-def convert_xml_to_json_feature(xml,feature):
+def convert_xml_to_json_feature(xml):
     json_xml = np.NaN
     if xml is not None:
         dict_xml = xmltodict.parse(xml)
@@ -141,19 +142,31 @@ def convert_xml_to_json_feature(xml,feature):
 def xml_change_values(data):
     features = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
     for feature in features:
-        data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x,feature))
+        data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x))
+
         if feature == "shoton":
             handle_shot_on(data)
-            ## drop the specific feature
+            data = drop_features(data, ["shoton"])
 
-        elif feature == "shoton":
+        elif feature == "shotoff":
             handle_shot_off(data)
+            data = drop_features(data, ["shotoff"])
 
         elif feature == "goal":
             handle_goal(data)
+            data = drop_features(data, ["goal"])
 
         elif feature == "corner":
             handle_corner(data)
+            data = drop_features(data, ["corner"])
+
+        elif feature == "foulcommit":
+            handle_foulcommit(data)
+            data = drop_features(data, ["foulcommit"])
+
+        elif feature == "card":
+            handle_card(data)
+            data = drop_features(data, ["card"])
 
     print("xml data was succssefully converted")
     return data
@@ -162,7 +175,7 @@ def xml_change_values(data):
 # This method drop unnecessary features
 def drop_features(data, features_to_drop):
     data.drop(features_to_drop, axis='columns', inplace=True)
-    print("features were succssefully droped")
+    print("features were succssefully droped" + str(features_to_drop))
     return data
 
 
@@ -242,15 +255,24 @@ def create_goal_var(data):
 
 
 # This method choose best params model by using grid search algorithm
-def best_params_model(model, X_train_, y_train_, grid_variables):
-    k_fold = KFold(n_splits=5)
-    X_train, X_test, y_train, y_test = train_test_split(X_train_, y_train_, test_size=0.2)
-    grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
-    grid_results = grid.fit(X_train, y_train)
-    model = grid_results.best_estimator_
-    print("model params were succssefully selected")
-    return model
+# def best_params_model(model, X_train_, y_train_, grid_variables):
+#     k_fold = KFold(n_splits=5)
+#     X_train, X_test, y_train, y_test = train_test_split(X_train_, y_train_, test_size=0.2)
+#     grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
+#     grid_results = grid.fit(X_train, y_train)
+#     model = grid_results.best_estimator_
+#     print("model params were succssefully selected")
+#     return model
 
+def classification_model(model,x,y):
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+    model.fit(X_train,y_train)
+
+    model_prediction = model.predict(X_test)
+    accuracy = metrics.accuracy_score(y_test,model_prediction)
+
+    print("cross validation accuracy score %s" % "{0:.3}".format(accuracy))
+    return model
 
 # This method adds missing categorials values
 def add_categorial_missing_values(data, col, value):
@@ -352,13 +374,6 @@ def random_forest(data, X_train, y_train, X_test, y_test):
 
 def get_players_statistics(data, players_data):
 
-    # data['home_team_potential'] = data.apply(lambda _: '', axis=1)
-    # data['away_team_potential'] = data.apply(lambda _: '', axis=1)
-    # data['home_team_stamina'] = data.apply(lambda _: '', axis=1)
-    # data['away_team_stamina'] = data.apply(lambda _: '', axis=1)
-    # data['home_team_overall'] = data.apply(lambda _: '', axis=1)
-    # data['away_team_overall'] = data.apply(lambda _: '', axis=1)
-
     for index, row in data.iterrows():
         home_team_potential = 0
         away_team_potential = 0
@@ -411,9 +426,10 @@ def handle_shot_on(data):
 
         try:
             curr_dict = json.loads(data.iloc[index]["shoton"])["shoton"]["value"]
+
+        except:
             data.loc[index, 'home_shoton'] = math.nan
             data.loc[index, 'away_shoton'] = math.nan
-        except:
             continue
 
         ## if it a list of dict
@@ -425,11 +441,14 @@ def handle_shot_on(data):
 
                 ## check if the team value in the xml dict match the home id col or the away to
                 ## update the counters accordingly
-                if float(shoton["team"]) == data.iloc[index]['home_team_id']:
-                    home_team_shoot_on += float(1)
-                elif float(shoton["team"]) == data.iloc[index]['away_team_id']:
-                    away_team_shoot_on += float(1)
+                try:
 
+                    if float(shoton["team"]) == data.iloc[index]['home_team_id']:
+                        home_team_shoot_on += float(1)
+                    elif float(shoton["team"]) == data.iloc[index]['away_team_id']:
+                        away_team_shoot_on += float(1)
+                except:
+                    continue
             ## set the new col of the home and away shot in the data dataframe
             data.loc[index, 'home_shoton'] = home_team_shoot_on
             data.loc[index, 'away_shoton'] = away_team_shoot_on
@@ -437,13 +456,20 @@ def handle_shot_on(data):
         ## if it a single dict
         else:
             ## same logic guest without a loop
-            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
-                home_team_shoot_on += float(1)
-            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
-                away_team_shoot_on += float(1)
+            try:
+                if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_shoot_on += float(1)
+                elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_shoot_on += float(1)
 
-            data.loc[index, 'home_shoton'] = home_team_shoot_on
-            data.loc[index, 'away_shoton'] = away_team_shoot_on
+                data.loc[index, 'home_shoton'] = home_team_shoot_on
+                data.loc[index, 'away_shoton'] = away_team_shoot_on
+
+            except:
+                data.loc[index, 'home_shoton'] = math.nan
+                data.loc[index, 'away_shoton'] = math.nan
+                continue
+
 
 def handle_shot_off(data):
 
@@ -456,16 +482,23 @@ def handle_shot_off(data):
             curr_dict = json.loads(data.iloc[index]["shotoff"])["shotoff"]["value"]
 
         except:
+            data.loc[index, 'home_shotoff'] = math.nan
+            data.loc[index, 'away_shotoff'] = math.nan
             continue
 
         if type(curr_dict) is list:
 
             for shotoff in curr_dict:
 
-                if float(shotoff["team"]) == data.iloc[index]['home_team_id']:
-                    home_team_shoot_off -= float(1)
-                elif float(shotoff["team"]) == data.iloc[index]['away_team_id']:
-                    away_team_shoot_off -= float(1)
+                try:
+
+                    if float(shotoff["team"]) == data.iloc[index]['home_team_id']:
+                        home_team_shoot_off -= float(1)
+                    elif float(shotoff["team"]) == data.iloc[index]['away_team_id']:
+                        away_team_shoot_off -= float(1)
+
+                except:
+                    continue
 
             ## set the new col of the home and away shot in the data dataframe
             data.loc[index, 'home_shotoff'] = home_team_shoot_off
@@ -473,13 +506,19 @@ def handle_shot_off(data):
 
         else:
 
-            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
-                home_team_shoot_off -= float(1)
-            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
-                away_team_shoot_off -= float(1)
+            try:
+                if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_shoot_off -= float(1)
+                elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_shoot_off -= float(1)
 
-            data.loc[index, 'home_shoton'] = home_team_shoot_off
-            data.loc[index, 'away_shoton'] = away_team_shoot_off
+                data.loc[index, 'home_shotoff'] = home_team_shoot_off
+                data.loc[index, 'away_shotoff'] = away_team_shoot_off
+
+            except:
+                data.loc[index, 'home_shotoff'] = math.nan
+                data.loc[index, 'away_shotoff'] = math.nan
+                continue
 
 def handle_goal(data):
 
@@ -492,30 +531,42 @@ def handle_goal(data):
             curr_dict = json.loads(data.iloc[index]["goal"])["goal"]["value"]
 
         except:
+            data.loc[index, 'home_goal'] = math.nan
+            data.loc[index, 'away_goal'] = math.nan
             continue
 
         if type(curr_dict) is list:
 
             for goal in curr_dict:
 
-                if float(goal["team"]) == data.iloc[index]['home_team_id']:
-                    home_team_goal += float(1)
-                elif float(goal["team"]) == data.iloc[index]['away_team_id']:
-                    away_team_goal += float(1)
+                try:
+                    if float(goal["team"]) == data.iloc[index]['home_team_id']:
+                        home_team_goal += float(1)
+                    elif float(goal["team"]) == data.iloc[index]['away_team_id']:
+                        away_team_goal += float(1)
+                except:
+                    continue
 
             ## set the new col of the home and away shot in the data dataframe
             data.loc[index, 'home_goal'] = home_team_goal
             data.loc[index, 'away_goal'] = away_team_goal
 
         else:
+            try:
 
-            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
-                home_team_goal += float(1)
-            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
-                away_team_goal += float(1)
+                if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_goal += float(1)
+                elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_goal += float(1)
 
-            data.loc[index, 'home_goal'] = home_team_goal
-            data.loc[index, 'away_goal'] = away_team_goal
+                data.loc[index, 'home_goal'] = home_team_goal
+                data.loc[index, 'away_goal'] = away_team_goal
+
+            except:
+                data.loc[index, 'home_goal'] = math.nan
+                data.loc[index, 'away_goal'] = math.nan
+                continue
+
 
 def handle_corner(data):
 
@@ -528,30 +579,133 @@ def handle_corner(data):
             curr_dict = json.loads(data.iloc[index]["corner"])["corner"]["value"]
 
         except:
+            data.loc[index, 'home_corner'] = math.nan
+            data.loc[index, 'away_corner'] = math.nan
             continue
 
         if type(curr_dict) is list:
 
             for goal in curr_dict:
+                try:
+                    if float(goal["team"]) == data.iloc[index]['home_team_id']:
+                        home_team_corner += float(1)
+                    elif float(goal["team"]) == data.iloc[index]['away_team_id']:
+                        away_team_corner += float(1)
 
-                if float(goal["team"]) == data.iloc[index]['home_team_id']:
-                    home_team_corner += float(1)
-                elif float(goal["team"]) == data.iloc[index]['away_team_id']:
-                    away_team_corner += float(1)
+                except:
+                    continue
 
             ## set the new col of the home and away shot in the data dataframe
-            data.loc[index, 'home_goal'] = home_team_corner
-            data.loc[index, 'away_goal'] = away_team_corner
-
-        else:
-
-            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
-                home_team_corner += float(1)
-            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
-                away_team_corner += float(1)
-
             data.loc[index, 'home_corner'] = home_team_corner
             data.loc[index, 'away_corner'] = away_team_corner
+
+        else:
+            try:
+                if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_corner += float(1)
+                elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_corner += float(1)
+
+                data.loc[index, 'home_corner'] = home_team_corner
+                data.loc[index, 'away_corner'] = away_team_corner
+
+            except:
+                data.loc[index, 'home_corner'] = math.nan
+                data.loc[index, 'away_corner'] = math.nan
+                continue
+
+def handle_card(data):
+
+    for index, rows in data.iterrows():
+
+        home_team_cards = 0
+        away_team_cards = 0
+
+        try:
+            curr_dict = json.loads(data.iloc[index]["card"])["card"]["value"]
+
+        except:
+            data.loc[index, 'home_cards'] = math.nan
+            data.loc[index, 'away_cards'] = math.nan
+            continue
+
+        if type(curr_dict) is list:
+
+            for goal in curr_dict:
+                try:
+                    if float(goal["team"]) == data.iloc[index]['home_team_id']:
+                        home_team_cards -= float(1)
+                    elif float(goal["team"]) == data.iloc[index]['away_team_id']:
+                        away_team_cards -= float(1)
+
+                except:
+                    continue
+
+            ## set the new col of the home and away shot in the data dataframe
+            data.loc[index, 'home_cards'] = home_team_cards
+            data.loc[index, 'away_cards'] = away_team_cards
+
+        else:
+            try:
+                if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_cards -= float(1)
+                elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_cards -= float(1)
+
+                data.loc[index, 'home_cards'] = home_team_cards
+                data.loc[index, 'away_cards'] = away_team_cards
+
+            except:
+                data.loc[index, 'home_cards'] = math.nan
+                data.loc[index, 'away_cards'] = math.nan
+                continue
+
+
+def handle_foulcommit(data):
+
+    for index, rows in data.iterrows():
+
+        home_team_fouls = 0
+        away_team_fouls = 0
+
+        try:
+            curr_dict = json.loads(data.iloc[index]["foulcommit"])["foulcommit"]["value"]
+
+        except:
+            data.loc[index, 'home_fouls'] = math.nan
+            data.loc[index, 'away_fouls'] = math.nan
+            continue
+
+        if type(curr_dict) is list:
+
+            for goal in curr_dict:
+                try:
+                    if float(goal["team"]) == data.iloc[index]['home_team_id']:
+                        home_team_fouls -= float(1)
+                    elif float(goal["team"]) == data.iloc[index]['away_team_id']:
+                        away_team_fouls -= float(1)
+
+                except:
+                    continue
+
+
+            data.loc[index, 'home_fouls'] = home_team_fouls
+            data.loc[index, 'away_fouls'] = away_team_fouls
+
+        else:
+            try:
+                if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_fouls -= float(1)
+                elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_fouls -= float(1)
+
+                data.loc[index, 'home_fouls'] = home_team_fouls
+                data.loc[index, 'away_fouls'] = away_team_fouls
+
+            except:
+                data.loc[index, 'home_fouls'] = math.nan
+                data.loc[index, 'away_fouls'] = math.nan
+                continue
 
 
 def handle_data(data):
