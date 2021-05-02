@@ -7,7 +7,7 @@ import sys
 import sqlite3
 import pandas as pd
 import numpy as np
-from sklearn import metrics
+from sklearn import metrics, svm
 from sklearn.preprocessing import LabelEncoder
 from numpy.core import mean
 from sklearn.model_selection import KFold
@@ -368,8 +368,8 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     n_estimators = [10, 20, 30] + [i for i in range(45, 105, 5)]
     max_depth = [2, 4, 8, 16, 32, 64]
     grid_variables = {'n_estimators': n_estimators, 'max_depth': max_depth}
-    best_model = best_params_model(model, X_train, y_train, grid_variables)
-    best_model = fit_model(best_model, data, X_train, y_train)
+    # best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
 
 def get_players_statistics(data, players_data):
@@ -708,6 +708,44 @@ def handle_foulcommit(data):
                 continue
 
 
+def linear_svm(X_train, y_train, X_test, y_test):
+
+    kernel = ["linear", "poly", "rbf", "sigmoid", "precomputed"]
+    choosen_model = ""
+    f_max_score = 0
+
+    for ker in kernel:
+
+        clf = svm.SVC(kernel=ker)
+
+        # Train the model using the training sets
+        clf.fit(X_train, y_train)
+
+        # Predict the response for test dataset
+        y_pred = clf.predict(X_test)
+
+        curr_f = metrics.accuracy_score(y_test, y_pred)
+
+        if curr_f > f_max_score:
+            f_max_score = curr_f
+            choosen_model = ker
+
+    clf = svm.SVC(kernel=choosen_model)
+
+    # Train the model using the training sets
+    clf.fit(X_train, y_train)
+
+    # Predict the response for test dataset
+    y_pred = clf.predict(X_test)
+
+    curr_f = metrics.accuracy_score(y_test, y_pred)
+
+    if curr_f > f_max_score:
+        f_max_score = curr_f
+        choosen_model = ker
+
+    evaluate_model(clf,"SVM",X_test,y_pred)
+
 def handle_data(data):
     data = xml_change_values(data)
     # clean data (X)
@@ -725,4 +763,5 @@ if __name__ == '__main__':
     # handle test data (sessons 2015/2016)
     X_test, y_test = handle_data(get_test_data())
 
-    random_forest(data, X_train, y_train,  X_test, y_test)
+    # random_forest(data, X_train, y_train,  X_test, y_test)
+    linear_svm(X_train, y_train,  X_test, y_test)
