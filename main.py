@@ -1,4 +1,6 @@
 import json
+import math
+
 import xmltodict
 import sys
 # from bs4 import BeautifulSoup
@@ -145,6 +147,16 @@ def xml_change_values(data):
         data[feature] = data[feature].apply(lambda x: convert_xml_to_json_feature(x,feature))
         if feature == "shoton":
             handle_shot_on(data)
+            ## drop the specific feature
+
+        elif feature == "shoton":
+            handle_shot_off(data)
+
+        elif feature == "goal":
+            handle_goal(data)
+
+        elif feature == "corner":
+            handle_corner(data)
 
     print("xml data was succssefully converted")
     return data
@@ -380,7 +392,12 @@ def handle_shot_on(data):
         ## this row change to value of the json string into a dict or a list of dicts depends on how many
         ## shot on record there was in the match if we had one event its a dict,else its a list of dicts
 
-        curr_dict = json.loads(data.iloc[index]["shoton"])["shoton"]["value"]
+        try:
+            curr_dict = json.loads(data.iloc[index]["shoton"])["shoton"]["value"]
+            data.loc[index, 'home_shoton'] = math.nan
+            data.loc[index, 'away_shoton'] = math.nan
+        except:
+            continue
 
         ## if it a list of dict
 
@@ -410,6 +427,114 @@ def handle_shot_on(data):
 
             data.loc[index, 'home_shoton'] = home_team_shoot_on
             data.loc[index, 'away_shoton'] = away_team_shoot_on
+
+def handle_shot_off(data):
+
+    for index,rows in data.iterrows():
+
+        home_team_shoot_off = 0
+        away_team_shoot_off = 0
+
+        try:
+            curr_dict = json.loads(data.iloc[index]["shotoff"])["shotoff"]["value"]
+
+        except:
+            continue
+
+        if type(curr_dict) is list:
+
+            for shotoff in curr_dict:
+
+                if float(shotoff["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_shoot_off -= float(1)
+                elif float(shotoff["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_shoot_off -= float(1)
+
+            ## set the new col of the home and away shot in the data dataframe
+            data.loc[index, 'home_shotoff'] = home_team_shoot_off
+            data.loc[index, 'away_shotoff'] = away_team_shoot_off
+
+        else:
+
+            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                home_team_shoot_off -= float(1)
+            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                away_team_shoot_off -= float(1)
+
+            data.loc[index, 'home_shoton'] = home_team_shoot_off
+            data.loc[index, 'away_shoton'] = away_team_shoot_off
+
+def handle_goal(data):
+
+    for index,rows in data.iterrows():
+
+        home_team_goal = 0
+        away_team_goal = 0
+
+        try:
+            curr_dict = json.loads(data.iloc[index]["goal"])["goal"]["value"]
+
+        except:
+            continue
+
+        if type(curr_dict) is list:
+
+            for goal in curr_dict:
+
+                if float(goal["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_goal += float(1)
+                elif float(goal["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_goal += float(1)
+
+            ## set the new col of the home and away shot in the data dataframe
+            data.loc[index, 'home_goal'] = home_team_goal
+            data.loc[index, 'away_goal'] = away_team_goal
+
+        else:
+
+            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                home_team_goal += float(1)
+            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                away_team_goal += float(1)
+
+            data.loc[index, 'home_goal'] = home_team_goal
+            data.loc[index, 'away_goal'] = away_team_goal
+
+def handle_corner(data):
+
+    for index,rows in data.iterrows():
+
+        home_team_corner = 0
+        away_team_corner = 0
+
+        try:
+            curr_dict = json.loads(data.iloc[index]["corner"])["corner"]["value"]
+
+        except:
+            continue
+
+        if type(curr_dict) is list:
+
+            for goal in curr_dict:
+
+                if float(goal["team"]) == data.iloc[index]['home_team_id']:
+                    home_team_corner += float(1)
+                elif float(goal["team"]) == data.iloc[index]['away_team_id']:
+                    away_team_corner += float(1)
+
+            ## set the new col of the home and away shot in the data dataframe
+            data.loc[index, 'home_goal'] = home_team_corner
+            data.loc[index, 'away_goal'] = away_team_corner
+
+        else:
+
+            if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
+                home_team_corner += float(1)
+            elif float(curr_dict["team"]) == data.iloc[index]['away_team_id']:
+                away_team_corner += float(1)
+
+            data.loc[index, 'home_corner'] = home_team_corner
+            data.loc[index, 'away_corner'] = away_team_corner
 
 def handle_data(data):
     data = xml_change_values(data)
