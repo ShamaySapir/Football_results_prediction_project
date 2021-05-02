@@ -65,7 +65,7 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 1000;""", conn)
+                                    LIMIT 50000;""", conn)
     print("Got train data succssefully")
     return data
 
@@ -125,7 +125,7 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 1000;""", conn)
+                                    LIMIT 50000;""", conn)
     print("Got test data succssefully")
     return data
 
@@ -136,7 +136,6 @@ def convert_xml_to_json_feature(xml):
         dict_xml = xmltodict.parse(xml)
         json_xml = json.dumps(dict_xml)
     return json_xml
-
 
 
 def xml_change_values(data):
@@ -153,7 +152,7 @@ def xml_change_values(data):
             data = drop_features(data, ["shotoff"])
 
         elif feature == "goal":
-            handle_goal(data)
+            # handle_goal(data)
             data = drop_features(data, ["goal"])
 
         elif feature == "corner":
@@ -177,7 +176,6 @@ def drop_features(data, features_to_drop):
     data.drop(features_to_drop, axis='columns', inplace=True)
     print("features were succssefully droped" + str(features_to_drop))
     return data
-
 
 
 # This method clean none values
@@ -217,8 +215,6 @@ def discritization(data):
 # clean the data from none values and outliers,
 # also does a disritization for relevant features
 def pre_processing(data):
-    features_to_drop = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
-    data = drop_features(data, features_to_drop)
     data = clean_na(data)
 
     #TODO: problems in clean_outlier(data), discritization(data)
@@ -242,7 +238,7 @@ def pre_processing(data):
 # This method creates the goal variable of the data
 #TODO: change types
 def create_goal_var(data):
-    data['target'] = data.apply(lambda _: 0, axis=1)
+    # data['target'] = data.apply(lambda _: 0, axis=1)
     for index, row in data.iterrows():
         if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
             data.loc[index, 'target'] = 1
@@ -251,18 +247,19 @@ def create_goal_var(data):
         else:
             data.loc[index, 'target'] = 0
     print("target data was succssefully created")
-    return data['target']
+    data = drop_features(data, ["home_team_goal", "home_team_goal"])
+    return data
 
 
 # This method choose best params model by using grid search algorithm
-# def best_params_model(model, X_train_, y_train_, grid_variables):
-#     k_fold = KFold(n_splits=5)
-#     X_train, X_test, y_train, y_test = train_test_split(X_train_, y_train_, test_size=0.2)
-#     grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
-#     grid_results = grid.fit(X_train, y_train)
-#     model = grid_results.best_estimator_
-#     print("model params were succssefully selected")
-#     return model
+def best_params_model(model, X_train_, y_train_, grid_variables):
+    k_fold = KFold(n_splits=5)
+    X_train, X_test, y_train, y_test = train_test_split(X_train_, y_train_, test_size=0.2)
+    grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
+    grid_results = grid.fit(X_train, y_train)
+    model = grid_results.best_estimator_
+    print("model params were succssefully selected")
+    return model
 
 def classification_model(model,x,y):
     X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
@@ -284,7 +281,6 @@ def add_numerical_missing_values(data, col, value):
     data[col].fillna(value, inplace=True)
 
 
-
 def fill_nones(train, test):
     # numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
     for col in train.columns:
@@ -320,11 +316,10 @@ def fill_nones(train, test):
 
     print("nones were succssefully imputed")
     print(train)
-
 
 
 def fit_model(model, data, X_train_, y_train_):
-    k_fold = KFold(n_splits=10)
+    k_fold = KFold(n_splits=4)
     f1_max_score = 0
     final_model = None
     for train_index, test_index in k_fold.split(data):
@@ -341,8 +336,7 @@ def fit_model(model, data, X_train_, y_train_):
         if f1 > f1_max_score:
             f1_max_score = f1
             final_model = model
-    if f1_max_score == 0:
-        final_model = model
+
     print("model was succssefully chosen")
     return final_model
 
@@ -368,8 +362,8 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     n_estimators = [10, 20, 30] + [i for i in range(45, 105, 5)]
     max_depth = [2, 4, 8, 16, 32, 64]
     grid_variables = {'n_estimators': n_estimators, 'max_depth': max_depth}
-    best_model = best_params_model(model, X_train, y_train, grid_variables)
-    best_model = fit_model(best_model, data, X_train, y_train)
+    # best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
 
 def get_players_statistics(data, players_data):
@@ -428,8 +422,8 @@ def handle_shot_on(data):
             curr_dict = json.loads(data.iloc[index]["shoton"])["shoton"]["value"]
 
         except:
-            data.loc[index, 'home_shoton'] = math.nan
-            data.loc[index, 'away_shoton'] = math.nan
+            data.loc[index, 'home_shoton'] = float(0)
+            data.loc[index, 'away_shoton'] = float(0)
             continue
 
         ## if it a list of dict
@@ -466,8 +460,8 @@ def handle_shot_on(data):
                 data.loc[index, 'away_shoton'] = away_team_shoot_on
 
             except:
-                data.loc[index, 'home_shoton'] = math.nan
-                data.loc[index, 'away_shoton'] = math.nan
+                data.loc[index, 'home_shoton'] = float(0)
+                data.loc[index, 'away_shoton'] = float(0)
                 continue
 
 
@@ -482,8 +476,8 @@ def handle_shot_off(data):
             curr_dict = json.loads(data.iloc[index]["shotoff"])["shotoff"]["value"]
 
         except:
-            data.loc[index, 'home_shotoff'] = math.nan
-            data.loc[index, 'away_shotoff'] = math.nan
+            data.loc[index, 'home_shotoff'] = float(0)
+            data.loc[index, 'away_shotoff'] = float(0)
             continue
 
         if type(curr_dict) is list:
@@ -516,8 +510,8 @@ def handle_shot_off(data):
                 data.loc[index, 'away_shotoff'] = away_team_shoot_off
 
             except:
-                data.loc[index, 'home_shotoff'] = math.nan
-                data.loc[index, 'away_shotoff'] = math.nan
+                data.loc[index, 'home_shotoff'] = float(0)
+                data.loc[index, 'away_shotoff'] = float(0)
                 continue
 
 def handle_goal(data):
@@ -531,8 +525,8 @@ def handle_goal(data):
             curr_dict = json.loads(data.iloc[index]["goal"])["goal"]["value"]
 
         except:
-            data.loc[index, 'home_goal'] = math.nan
-            data.loc[index, 'away_goal'] = math.nan
+            data.loc[index, 'home_goal'] = float(0)
+            data.loc[index, 'away_goal'] = float(0)
             continue
 
         if type(curr_dict) is list:
@@ -563,8 +557,8 @@ def handle_goal(data):
                 data.loc[index, 'away_goal'] = away_team_goal
 
             except:
-                data.loc[index, 'home_goal'] = math.nan
-                data.loc[index, 'away_goal'] = math.nan
+                data.loc[index, 'home_goal'] = float(0)
+                data.loc[index, 'away_goal'] = float(0)
                 continue
 
 
@@ -579,8 +573,8 @@ def handle_corner(data):
             curr_dict = json.loads(data.iloc[index]["corner"])["corner"]["value"]
 
         except:
-            data.loc[index, 'home_corner'] = math.nan
-            data.loc[index, 'away_corner'] = math.nan
+            data.loc[index, 'home_corner'] = float(0)
+            data.loc[index, 'away_corner'] = float(0)
             continue
 
         if type(curr_dict) is list:
@@ -610,8 +604,8 @@ def handle_corner(data):
                 data.loc[index, 'away_corner'] = away_team_corner
 
             except:
-                data.loc[index, 'home_corner'] = math.nan
-                data.loc[index, 'away_corner'] = math.nan
+                data.loc[index, 'home_corner'] = float(0)
+                data.loc[index, 'away_corner'] = float(0)
                 continue
 
 def handle_card(data):
@@ -625,8 +619,8 @@ def handle_card(data):
             curr_dict = json.loads(data.iloc[index]["card"])["card"]["value"]
 
         except:
-            data.loc[index, 'home_cards'] = math.nan
-            data.loc[index, 'away_cards'] = math.nan
+            data.loc[index, 'home_cards'] = float(0)
+            data.loc[index, 'away_cards'] = float(0)
             continue
 
         if type(curr_dict) is list:
@@ -656,8 +650,8 @@ def handle_card(data):
                 data.loc[index, 'away_cards'] = away_team_cards
 
             except:
-                data.loc[index, 'home_cards'] = math.nan
-                data.loc[index, 'away_cards'] = math.nan
+                data.loc[index, 'home_cards'] = float(0)
+                data.loc[index, 'away_cards'] = float(0)
                 continue
 
 
@@ -672,8 +666,8 @@ def handle_foulcommit(data):
             curr_dict = json.loads(data.iloc[index]["foulcommit"])["foulcommit"]["value"]
 
         except:
-            data.loc[index, 'home_fouls'] = math.nan
-            data.loc[index, 'away_fouls'] = math.nan
+            data.loc[index, 'home_fouls'] = float(0)
+            data.loc[index, 'away_fouls'] = float(0)
             continue
 
         if type(curr_dict) is list:
@@ -703,8 +697,8 @@ def handle_foulcommit(data):
                 data.loc[index, 'away_fouls'] = away_team_fouls
 
             except:
-                data.loc[index, 'home_fouls'] = math.nan
-                data.loc[index, 'away_fouls'] = math.nan
+                data.loc[index, 'home_fouls'] = float(0)
+                data.loc[index, 'away_fouls'] = float(0)
                 continue
 
 
@@ -713,16 +707,18 @@ def handle_data(data):
     # clean data (X)
     X = pre_processing(data)
     # create goal variable (y)
-    y = create_goal_var(X)
+    create_goal_var(X)
+    X = data.iloc[:, :-1]
+    y = data['target']
 
-    return X, y
+    return data, X, y
+
 
 if __name__ == '__main__':
     # handle train data
-    X_train, y_train = handle_data(get_train_data())
-    data = pd.concat([X_train, y_train], axis=1)
+    train_data, X_train, y_train = handle_data(get_train_data())
 
     # handle test data (sessons 2015/2016)
-    X_test, y_test = handle_data(get_test_data())
+    test_data, X_test, y_test = handle_data(get_test_data())
 
-    random_forest(data, X_train, y_train,  X_test, y_test)
+    random_forest(train_data, X_train, y_train,  X_test, y_test)
