@@ -1,4 +1,6 @@
 import json
+import math
+
 import xmltodict
 import sys
 # from bs4 import BeautifulSoup
@@ -23,7 +25,6 @@ def get_train_data():
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id, 
                                             League.name AS league_name, 
-                                            date,
                                             season, 
                                             stage, 
                                             shoton,
@@ -63,7 +64,7 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 500;""", conn)
+                                    LIMIT 1000;""", conn)
     print("Got train data succssefully")
     return data
 
@@ -123,8 +124,8 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 500;""", conn)
-    print("Got train data succssefully")
+                                    LIMIT 1000;""", conn)
+    print("Got test data succssefully")
     return data
 
 
@@ -148,8 +149,7 @@ def xml_change_values(data):
 
 
 # This method drop unnecessary features
-def drop_features(data):
-    features_to_drop = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+def drop_features(data, features_to_drop):
     data.drop(features_to_drop, axis='columns', inplace=True)
     print("features were succssefully droped")
     return data
@@ -193,13 +193,22 @@ def discritization(data):
 # clean the data from none values and outliers,
 # also does a disritization for relevant features
 def pre_processing(data):
-    data = drop_features(data)
+    features_to_drop = ['shoton', 'shotoff', 'goal', 'corner', 'foulcommit', 'card']
+    data = drop_features(data, features_to_drop)
     data = clean_na(data)
 
     #TODO: problems in clean_outlier(data), discritization(data)
     #data = clean_outlier(data)
-    #data = discritization(data)
+    data = discritization(data)
     data = get_players_statistics(data, get_player_attributes())
+
+    players = []
+    for i in range(11):
+        players.append('home_player_' + str(i+1))
+        players.append('away_player_' + str(i+1))
+
+    data = drop_features(data, players)
+
     # discritization(clean_outlier(clean_na(drop_features(data))))
 
     print("pre process was succssefully finished")
@@ -207,8 +216,9 @@ def pre_processing(data):
 
 
 # This method creates the goal variable of the data
+#TODO: change types
 def create_goal_var(data):
-    data['target'] = data.apply(lambda _: '', axis=1)
+    data['target'] = data.apply(lambda _: 0, axis=1)
     for index, row in data.iterrows():
         if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
             data.loc[index, 'target'] = 1
@@ -331,12 +341,12 @@ def random_forest(data, X_train, y_train, X_test, y_test):
 
 def get_players_statistics(data, players_data):
 
-    data['home_team_potential'] = data.apply(lambda _: '', axis=1)
-    data['away_team_potential'] = data.apply(lambda _: '', axis=1)
-    data['home_team_stamina'] = data.apply(lambda _: '', axis=1)
-    data['away_team_stamina'] = data.apply(lambda _: '', axis=1)
-    data['home_team_overall'] = data.apply(lambda _: '', axis=1)
-    data['away_team_overall'] = data.apply(lambda _: '', axis=1)
+    # data['home_team_potential'] = data.apply(lambda _: '', axis=1)
+    # data['away_team_potential'] = data.apply(lambda _: '', axis=1)
+    # data['home_team_stamina'] = data.apply(lambda _: '', axis=1)
+    # data['away_team_stamina'] = data.apply(lambda _: '', axis=1)
+    # data['home_team_overall'] = data.apply(lambda _: '', axis=1)
+    # data['away_team_overall'] = data.apply(lambda _: '', axis=1)
 
     for index, row in data.iterrows():
         home_team_potential = 0
@@ -349,7 +359,7 @@ def get_players_statistics(data, players_data):
         num_a_players = 11
         for i in range(11):
             home_player_id = data.iloc[index]['home_player_' + str(i+1)]
-            if home_player_id is np.NaN:
+            if math.isnan(home_player_id):
                 num_h_players -= 1
             else:
                 home_team_potential += players_data.at[home_player_id, 'potential']
@@ -357,7 +367,7 @@ def get_players_statistics(data, players_data):
                 home_team_overall += players_data.at[home_player_id, 'overall_rating']
 
             away_player_id = data.iloc[index]['away_player_' + str(i+1)]
-            if away_player_id is np.NaN:
+            if math.isnan(away_player_id):
                 num_a_players -= 1
             else:
                 away_team_potential += players_data.at[away_player_id, 'potential']
@@ -370,6 +380,8 @@ def get_players_statistics(data, players_data):
         data.loc[index, 'away_team_potential'] = (away_team_potential/num_a_players).round(0)
         data.loc[index, 'away_team_stamina'] = (away_team_stamina/num_a_players).round(0)
         data.loc[index, 'away_team_overall'] = (away_team_overall/num_a_players).round(0)
+
+    return data
 
 
 def handle_data(data):
