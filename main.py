@@ -69,7 +69,8 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 500;""", conn)
+                                    LIMIT 400000;""", conn)
+
     print("Got train data succssefully")
     return data
 
@@ -129,7 +130,7 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 500;""", conn)
+                                    LIMIT 400000;""", conn)
     print("Got test data succssefully")
     return data
 
