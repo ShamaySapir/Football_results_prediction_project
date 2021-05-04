@@ -1,6 +1,6 @@
 import json
 import math
-
+import time
 import xmltodict
 import sys
 # from bs4 import BeautifulSoup
@@ -15,7 +15,7 @@ from sklearn.ensemble import RandomForestClassifier
 # from sklearn.tree import DecisionTreeClassifier, export_graphviz
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
-
+import matplotlib.pyplot as plt
 
 categorial_vec = ['league_name', 'season']
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
@@ -65,7 +65,7 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 400000;""", conn)
+                                    LIMIT 1000;""", conn)
     print("Got train data succssefully")
     return data
 
@@ -125,7 +125,7 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 400000;""", conn)
+                                    LIMIT 1000;""", conn)
     print("Got test data succssefully")
     return data
 
@@ -365,6 +365,8 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     # best_model = best_params_model(model, X_train, y_train, grid_variables)
     best_model = fit_model(model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
+    features_names = list(X_train.columns.values)
+    features_importance(model, features_names, "Random Forest")
 
 def get_players_statistics(data, players_data):
 
@@ -702,9 +704,41 @@ def handle_foulcommit(data):
                 continue
 
 
-def linear_svm(X_train, y_train, X_test, y_test):
+def features_importance(model, feature_names, model_name):
 
-    kernel = ["linear", "poly", "rbf", "sigmoid", "precomputed"]
+    if model_name == "Random Forest":
+
+        importances = model.feature_importances_
+        std = np.std([
+            tree.feature_importances_ for tree in model.estimators_], axis=0)
+        model_importances = pd.Series(importances, index=feature_names)
+
+        fig, ax = plt.subplots()
+        model_importances.plot.bar(yerr=std, ax=ax)
+        ax.set_title("Feature importances using " + model_name)
+        ax.set_ylabel("Mean decrease in impurity")
+        fig.tight_layout()
+        plt.show()
+
+    elif "SVM" in model_name:
+
+        importances = model.coef_
+        std = np.std([
+            tree.feature_importances_ for tree in model.estimators_], axis=0)
+        model_importances = pd.Series(importances, index=feature_names)
+
+        fig, ax = plt.subplots()
+        model_importances.plot.bar(yerr=std, ax=ax)
+        ax.set_title("Feature importances using " + model_name)
+        ax.set_ylabel("Mean decrease in impurity")
+        fig.tight_layout()
+        plt.show()
+
+
+def svm_model(X_train, y_train, X_test, y_test):
+
+    features_names = list(X_train.columns.values)
+    kernel = ["linear", "poly", "rbf", "sigmoid"]
     choosen_model = ""
     f_max_score = 0
 
@@ -729,16 +763,8 @@ def linear_svm(X_train, y_train, X_test, y_test):
     # Train the model using the training sets
     clf.fit(X_train, y_train)
 
-    # Predict the response for test dataset
-    y_pred = clf.predict(X_test)
-
-    curr_f = metrics.accuracy_score(y_test, y_pred)
-
-    if curr_f > f_max_score:
-        f_max_score = curr_f
-        choosen_model = ker
-
-    evaluate_model(clf,"SVM",X_test,y_pred)
+    evaluate_model(clf, choosen_model + "SVM", X_test, y_test)
+    features_importance(clf, features_names, choosen_model + "SVM")
 
 def handle_data(data):
     data = xml_change_values(data)
@@ -752,6 +778,7 @@ def handle_data(data):
     return data, X, y
 
 
+
 if __name__ == '__main__':
     # handle train data
     train_data, X_train, y_train = handle_data(get_train_data())
@@ -759,9 +786,7 @@ if __name__ == '__main__':
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
 
-<<<<<<< HEAD
-    # random_forest(data, X_train, y_train,  X_test, y_test)
-    linear_svm(X_train, y_train,  X_test, y_test)
-=======
+    svm_model(X_train, y_train,  X_test, y_test)
+
     random_forest(train_data, X_train, y_train,  X_test, y_test)
->>>>>>> aee82a9157fcfddf6016036e1747e954e66c4092
+
