@@ -13,16 +13,22 @@ from numpy.core import mean
 from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestClassifier
 # from sklearn.tree import DecisionTreeClassifier, export_graphviz
-from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
+from sklearn.metrics import f1_score, accuracy_score, confusion_matrix, precision_score, recall_score
 from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
 import matplotlib.pyplot as plt
+from sklearn import tree
+
+# imports for logistic regression
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix
+
+
 
 categorial_vec = ['league_name', 'season']
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
 
 # get train data from sqlite
 def get_train_data():
-    #    conn = sqlite3.connect('/content/drive/MyDrive/Colab Notebooks/database.sqlite')
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id, 
                                             League.name AS league_name, 
@@ -65,8 +71,11 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
+
                                     LIMIT 1000;""", conn)
     print("Got train data succssefully")
+    print("train data Nulls")
+    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     return data
 
 
@@ -79,9 +88,8 @@ def get_player_attributes():
     print("Got player data succssefully")
     return grouped_players_data
 
-# get test data from sqlite
+
 def get_test_data():
-#    conn = sqlite3.connect('/content/drive/MyDrive/Colab Notebooks/database.sqlite')
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id, 
                                             League.name AS league_name, 
@@ -125,8 +133,11 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 1000;""", conn)
+                                    ;""", conn)
+
     print("Got test data succssefully")
+    print("test data Nulls")
+    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     return data
 
 
@@ -247,15 +258,24 @@ def create_goal_var(data):
         else:
             data.loc[index, 'target'] = 0
     print("target data was succssefully created")
-    data = drop_features(data, ["home_team_goal", "home_team_goal"])
+    data = drop_features(data, ["home_team_goal", "away_team_goal", "id", "season", "home_team_id","away_team_id"])
     return data
 
 
 # This method choose best params model by using grid search algorithm
+# def best_params_model(model, X_train_, y_train_, grid_variables):
+#     k_fold = KFold(n_splits=5)
+#     X_train, X_test, y_train, y_test = train_test_split(X_train_, y_train_, test_size=0.2)
+#     grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
+#     grid_results = grid.fit(X_train, y_train)
+#     model = grid_results.best_estimator_
+#     print("model params were succssefully selected")
+#     return model
+
 def best_params_model(model, X_train_, y_train_, grid_variables):
     k_fold = KFold(n_splits=5)
     X_train, X_test, y_train, y_test = train_test_split(X_train_, y_train_, test_size=0.2)
-    grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
+    grid = GridSearchCV(model, grid_variables, cv=k_fold)
     grid_results = grid.fit(X_train, y_train)
     model = grid_results.best_estimator_
     print("model params were succssefully selected")
@@ -345,14 +365,18 @@ def print_model_evaluation(evaluation_list, name):
     print(f'--------{name}-------')
     print('Accuracy Score: %.3f' % (mean(evaluation_list[0])))
     print('F1 Score: %.3f' % (evaluation_list[1]))
+    print('Precision Score: %.3f' % (evaluation_list[2]))
+    print('Recall Score: %.3f' % (evaluation_list[3]))
 
 
 def evaluate_model(model, name, X_test, y_test):
     model_prediction = model.predict(X_test)
     accuracy = accuracy_score(y_test, model_prediction)
     f1 = f1_score(y_test, model_prediction, average='weighted', labels=np.unique(model_prediction))
+    precision = precision_score(y_test, model_prediction, average='weighted', labels=np.unique(model_prediction))
+    recall = recall_score(y_test, model_prediction, average='weighted', labels=np.unique(model_prediction))
 
-    print_model_evaluation([accuracy, f1], name)
+    print_model_evaluation([accuracy, f1, precision, recall], name)
     print("model was succssefully evaluated")
 
 
@@ -366,7 +390,24 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     best_model = fit_model(model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
     features_names = list(X_train.columns.values)
-    features_importance(model, features_names, "Random Forest")
+    # features_importance(model, features_names, "Random Forest")
+
+
+
+# Logistic Regression
+def logistic_regression(data, X_train, y_train, X_test, y_test):
+    model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
+    model.fit(X_train, y_train)
+    evaluate_model(model, "Logistic Regression", X_test, y_test)
+
+
+# CART
+def CART(X_train, y_train, X_test, y_test):
+    model = tree.DecisionTreeClassifier()
+    best_model = model.fit(X_train, y_train)
+    evaluate_model(best_model, "CART", X_test, y_test)
+
+
 
 def get_players_statistics(data, players_data):
 
@@ -738,7 +779,7 @@ def features_importance(model, feature_names, model_name):
 def svm_model(X_train, y_train, X_test, y_test):
 
     features_names = list(X_train.columns.values)
-    kernel = ["linear", "poly", "rbf", "sigmoid"]
+    kernel = ["poly", "rbf", "sigmoid"]
     choosen_model = ""
     f_max_score = 0
 
@@ -764,7 +805,7 @@ def svm_model(X_train, y_train, X_test, y_test):
     clf.fit(X_train, y_train)
 
     evaluate_model(clf, choosen_model + "SVM", X_test, y_test)
-    features_importance(clf, features_names, choosen_model + "SVM")
+    # features_importance(clf, features_names, choosen_model + "SVM")
 
 def handle_data(data):
     data = xml_change_values(data)
@@ -787,6 +828,7 @@ if __name__ == '__main__':
     test_data, X_test, y_test = handle_data(get_test_data())
 
     svm_model(X_train, y_train,  X_test, y_test)
-
+    logistic_regression(train_data, X_train, y_train,  X_test, y_test)
     random_forest(train_data, X_train, y_train,  X_test, y_test)
+    CART(X_train, y_train, X_test, y_test)
 
