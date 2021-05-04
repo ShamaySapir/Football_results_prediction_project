@@ -27,6 +27,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 categorial_vec = ['league_name', 'season']
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
 
+
 # get train data from sqlite
 def get_train_data():
     conn = sqlite3.connect('database.sqlite')
@@ -74,8 +75,6 @@ def get_train_data():
 
                                     LIMIT 1000;""", conn)
     print("Got train data succssefully")
-    print("train data Nulls")
-    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     return data
 
 
@@ -133,11 +132,9 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    ;""", conn)
+                                    LIMIT 1000;""", conn)
 
     print("Got test data succssefully")
-    print("test data Nulls")
-    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     return data
 
 
@@ -241,7 +238,8 @@ def pre_processing(data):
     data = drop_features(data, players)
 
     # discritization(clean_outlier(clean_na(drop_features(data))))
-
+    print("train data Nulls")
+    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     print("pre process was succssefully finished")
     return data
 
@@ -339,7 +337,7 @@ def fill_nones(train, test):
 
 
 def fit_model(model, data, X_train_, y_train_):
-    k_fold = KFold(n_splits=4)
+    k_fold = KFold(n_splits=5)
     f1_max_score = 0
     final_model = None
     for train_index, test_index in k_fold.split(data):
@@ -386,12 +384,11 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     n_estimators = [10, 20, 30] + [i for i in range(45, 105, 5)]
     max_depth = [2, 4, 8, 16, 32, 64]
     grid_variables = {'n_estimators': n_estimators, 'max_depth': max_depth}
-    # best_model = best_params_model(model, X_train, y_train, grid_variables)
-    best_model = fit_model(model, data, X_train, y_train)
+    best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(best_model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
     features_names = list(X_train.columns.values)
     # features_importance(model, features_names, "Random Forest")
-
 
 
 # Logistic Regression
@@ -406,7 +403,6 @@ def CART(X_train, y_train, X_test, y_test):
     model = tree.DecisionTreeClassifier()
     best_model = model.fit(X_train, y_train)
     evaluate_model(best_model, "CART", X_test, y_test)
-
 
 
 def get_players_statistics(data, players_data):
