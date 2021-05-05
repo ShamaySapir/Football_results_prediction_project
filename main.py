@@ -29,6 +29,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 categorial_vec = ['league_name', 'season']
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
 
+
 # get train data from sqlite
 def get_train_data():
     conn = sqlite3.connect('database.sqlite')
@@ -75,9 +76,8 @@ def get_train_data():
                                     WHERE season not like '2015/2016' and goal is not null
                                     LIMIT 100
                                    ;""", conn)
+
     print("Got train data succssefully")
-    print("train data Nulls")
-    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     return data
 
 
@@ -138,9 +138,8 @@ def get_test_data():
                                     LIMIT 100;
                                     """, conn)
 
+
     print("Got test data succssefully")
-    print("test data Nulls")
-    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     return data
 
 
@@ -244,7 +243,8 @@ def pre_processing(data):
     data = drop_features(data, players)
 
     # discritization(clean_outlier(clean_na(drop_features(data))))
-
+    print("train data Nulls")
+    print(data.apply(lambda x: sum(x.isnull()), axis=0))
     print("pre process was succssefully finished")
     return data
 
@@ -342,7 +342,7 @@ def fill_nones(train, test):
 
 
 def fit_model(model, data, X_train_, y_train_):
-    k_fold = KFold(n_splits=4)
+    k_fold = KFold(n_splits=5)
     f1_max_score = 0
     final_model = None
     for train_index, test_index in k_fold.split(data):
@@ -389,29 +389,48 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     n_estimators = [10, 20, 30] + [i for i in range(45, 105, 5)]
     max_depth = [2, 4, 8, 16, 32, 64]
     grid_variables = {'n_estimators': n_estimators, 'max_depth': max_depth}
-    # best_model = best_params_model(model, X_train, y_train, grid_variables)
-    best_model = fit_model(model, data, X_train, y_train)
+    best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(best_model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
     # features_names = list(X_train.columns.values)
     # features_importance(model, features_names, "Random Forest")
     shap_feature_importance(best_model, X_train, False)
 
-
 # Logistic Regression
 def logistic_regression(data, X_train, y_train, X_test, y_test):
-    features_names = list(X_train.columns.values)
-    model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
-    model.fit(X_train, y_train)
-    evaluate_model(model, "Logistic Regression", X_test, y_test)
-
-
+    model = LogisticRegression()
+    solver = ["newton-cg", "liblinear"]
+    C = [0.001, 0.01, 0.1, 1, 10, 100]
+    random_state = [None, 0, 42]
+    max_iter = [600, 700]
+    grid_variables = {'C': C, 'random_state': random_state, 'solver': solver, 'max_iter': max_iter}
+    best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(best_model, data, X_train, y_train)
+    # model.fit(X_train, y_train)
+    evaluate_model(best_model, "Logistic Regression", X_test, y_test)
 
 # CART
-def CART(X_train, y_train, X_test, y_test):
+def CART(data, X_train, y_train, X_test, y_test):
     model = tree.DecisionTreeClassifier()
-    best_model = model.fit(X_train, y_train)
+    max_depth = [2, 4, 8, 16, 32, 64]
+    min_weight_fraction_leaf = [i/20 for i in range(0, 10)]
+    grid_variables = {'max_depth': max_depth, 'min_weight_fraction_leaf': min_weight_fraction_leaf}
+    best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(best_model, data, X_train, y_train)
     evaluate_model(best_model, "CART", X_test, y_test)
 
+def svm_model(X_train, y_train, X_test, y_test):
+
+    clf = svm.SVC()
+    kernel = ['poly', 'rbf', 'sigmoid']
+    coef0 = [i/4 for i in range(0, 16)]
+    grid_variables = {'kernel': kernel, 'coef0': coef0}
+    best_model = best_params_model(clf, X_train, y_train, grid_variables)
+
+    # Train the model using the training sets
+    best_model.fit(X_train, y_train)
+
+    evaluate_model(best_model, str(best_model.kernel) + " SVM", X_test, y_test)
 
 
 def get_players_statistics(data, players_data):
@@ -753,47 +772,8 @@ def handle_foulcommit(data):
                 continue
 
 
-def features_importance(model, feature_names, model_name):
-
-    if model_name == "Random Forest":
-
-        importances = model.feature_importances_
-        std = np.std([
-            tree.feature_importances_ for tree in model.estimators_], axis=0)
-        model_importances = pd.Series(importances, index=feature_names)
-
-        fig, ax = plt.subplots()
-        model_importances.plot.bar(yerr=std, ax=ax)
-        ax.set_title("Feature importances using " + model_name)
-        ax.set_ylabel("Mean decrease in impurity")
-        fig.tight_layout()
-        plt.show()
-
-    elif model_name == "logistic_regression":
-        importance = model.coef_
-        fig, ax = plt.subplots()
-        # summarize feature importance
-        ax.set_title("Feature importances using " + model_name)
-        ax.set_ylabel("Mean decrease in impurity")
-        plt.bar(feature_names, importance)
-        fig.tight_layout()
-        plt.show()
 
 
-def svm_model(X_train, y_train, X_test, y_test):
-
-    features_names = list(X_train.columns.values)
-
-    clf = svm.SVC()
-    kernel = ['poly', 'rbf', 'sigmoid']
-    coef0 = [i/4 for i in range(0, 16)]
-    grid_variables = {'kernel': kernel, 'coef0': coef0}
-    best_model = best_params_model(clf, X_train, y_train, grid_variables)
-
-    # Train the model using the training sets
-    best_model.fit(X_train, y_train)
-
-    evaluate_model(best_model, str(best_model.kernel) + " SVM", X_test, y_test)
 
 
 
@@ -827,8 +807,9 @@ if __name__ == '__main__':
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
 
-    # svm_model(X_train, y_train,  X_test, y_test)
-    # logistic_regression(train_data, X_train, y_train,  X_test, y_test)
+    svm_model(X_train, y_train,  X_test, y_test)
+    logistic_regression(train_data, X_train, y_train,  X_test, y_test)
     random_forest(train_data, X_train, y_train,  X_test, y_test)
-    # CART(X_train, y_train, X_test, y_test)
+    CART(train_data, X_train, y_train, X_test, y_test)
+
 
