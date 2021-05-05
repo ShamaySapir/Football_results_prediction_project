@@ -72,8 +72,8 @@ def get_train_data():
                                     LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season not like '2015/2016' and goal is not null
-
-                                    LIMIT 1000;""", conn)
+                                    LIMIT 100;
+                                    """, conn)
     print("Got train data succssefully")
     return data
 
@@ -132,7 +132,7 @@ def get_test_data():
                                     LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                                     WHERE season like '2015/2016' and goal is not null
                                     ORDER by date
-                                    LIMIT 1000;""", conn)
+                                    LIMIT 100; """, conn)
 
     print("Got test data succssefully")
     return data
@@ -393,15 +393,26 @@ def random_forest(data, X_train, y_train, X_test, y_test):
 
 # Logistic Regression
 def logistic_regression(data, X_train, y_train, X_test, y_test):
-    model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
-    model.fit(X_train, y_train)
-    evaluate_model(model, "Logistic Regression", X_test, y_test)
+    model = LogisticRegression()
+    solver = ["newton-cg", "liblinear"]
+    C = [0.001, 0.01, 0.1, 1, 10, 100]
+    random_state = [None, 0, 42]
+    max_iter = [600, 700]
+    grid_variables = {'C': C, 'random_state': random_state, 'solver': solver, 'max_iter': max_iter}
+    best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(best_model, data, X_train, y_train)
+    # model.fit(X_train, y_train)
+    evaluate_model(best_model, "Logistic Regression", X_test, y_test)
 
 
 # CART
-def CART(X_train, y_train, X_test, y_test):
+def CART(data, X_train, y_train, X_test, y_test):
     model = tree.DecisionTreeClassifier()
-    best_model = model.fit(X_train, y_train)
+    max_depth = [2, 4, 8, 16, 32, 64]
+    min_weight_fraction_leaf = [i/20 for i in range(0, 10)]
+    grid_variables = {'max_depth': max_depth, 'min_weight_fraction_leaf': min_weight_fraction_leaf}
+    best_model = best_params_model(model, X_train, y_train, grid_variables)
+    best_model = fit_model(best_model, data, X_train, y_train)
     evaluate_model(best_model, "CART", X_test, y_test)
 
 
@@ -826,5 +837,5 @@ if __name__ == '__main__':
     svm_model(X_train, y_train,  X_test, y_test)
     logistic_regression(train_data, X_train, y_train,  X_test, y_test)
     random_forest(train_data, X_train, y_train,  X_test, y_test)
-    CART(X_train, y_train, X_test, y_test)
+    CART(train_data, X_train, y_train, X_test, y_test)
 
