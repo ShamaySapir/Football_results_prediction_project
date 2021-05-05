@@ -13,10 +13,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
 from sklearn.model_selection import KFold, GridSearchCV, train_test_split
 from sklearn.linear_model import LogisticRegression
-
-categorial_vec = ['league_name', 'season']
-numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
-
+from matplotlib import pyplot
 
 # get train data from sqlite
 def get_train_data():
@@ -62,7 +59,6 @@ def get_train_data():
                 LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                 LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                 WHERE season not like '2015/2016' and goal is not null
-                LIMIT 100
                ;""", conn)
 
     print("Got train data succssefully")
@@ -71,11 +67,11 @@ def get_train_data():
 
 def get_player_attributes():
     conn = sqlite3.connect('database.sqlite')
-    players_data = pd.read_sql("""SELECT player_api_id,date, overall_rating, potential, stamina
-                        FROM Player_Attributes""", conn)
+    players_data = pd.read_sql("""SELECT player_api_id,date, overall_rating, potential, stamina,
+                                    acceleration, sprint_speed, shot_power, strength, interceptions, standing_tackle, 
+                                    sliding_tackle FROM Player_Attributes""", conn)
     # avg all records for each player
     grouped_players_data = players_data.groupby('player_api_id').agg('mean').round(0)
-    print("Got player data succssefully")
     return grouped_players_data
 
 
@@ -123,9 +119,9 @@ def get_test_data():
                 LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                 WHERE season like '2015/2016' and goal is not null
                 ORDER by date
-                LIMIT 100;
-                """, conn)
+                ;""", conn)
     print("Got test data succssefully")
+
     return data
 
 
@@ -166,14 +162,13 @@ def xml_change_values(data):
             handle_card(data)
             data = drop_features(data, ["card"])
 
-    print("xml data was succssefully converted")
+    print("Xml data was successfully converted")
     return data
 
 
 # This method drop unnecessary features
 def drop_features(data, features_to_drop):
     data.drop(features_to_drop, axis='columns', inplace=True)
-    print("features were succssefully droped" + str(features_to_drop))
     return data
 
 
@@ -186,59 +181,74 @@ def clean_na(data):
         if threshold > count:
             print(data[col].count())
             data.drop(col, axis='columns', inplace=True)
+
     # Clean all row that have more then 5 features with None values.
     data.dropna(thresh=7, inplace=True)
-    print("data was succssefully cleaned")
+    print("Data was successfully cleaned")
     return data
 
 
 # This method detects outlier records
-# TODO: change numeric into columns names
 def clean_outlier(data):
-    for col in numerical_vec:
-        data[col] = data[np.abs(data[col]-data[col].mean()) <= (3*data[col].std())]
-    print("ouliers were succssefully deleted")
+    outlier_vec = ["home_shoton", "home_shotoff", "home_corner", "home_fouls", "home_cards", "home_team_overall_rating",
+                   "home_team_potential", "home_team_stamina", "away_shoton", "away_shotoff", "away_corner",
+                   "away_fouls", "away_cards", "away_team_overall_rating", "away_team_potential", "away_team_stamina"]
+    for col in outlier_vec:
+        data[col] = data[np.abs(data[col] - data[col].mean()) <= (3 * data[col].std())]
+    print("Ouliers were successfully deleted")
     return data
 
 
-def discritization(data):
+def discretization(data):
     # convert categorial variables into numeric values
     label_encoder = LabelEncoder()
-    for category in categorial_vec:
+    discret_vec = ['league_name', 'season']
+    for category in discret_vec:
         data[category] = label_encoder.fit_transform(data[category])
-    print("data was succssefully discritized")
+    print("data was successfully discretized")
+    return data
+
+
+# This method adds missing numerical values
+def add_numerical_missing_values(data, col, value):
+    data[col].fillna(value, inplace=True)
+    return data
+
+
+def fill_nones(data):
+    print("Data none values")
+    print(data.apply(lambda x: sum(x.isnull()), axis=0))
+    lst = data.columns[data.isna().any()].tolist()
+    for col in lst:
+        mean = data[col].mean()
+        add_numerical_missing_values(data, col, mean)
+    print(data.apply(lambda x: sum(x.isnull()), axis=0))
+    print("nones were successfully imputed")
     return data
 
 
 # This method drop features from data,
 # clean the data from none values and outliers,
-# also does a disritization for relevant features
+# also does a discretization for relevant features
 def pre_processing(data):
     data = clean_na(data)
-
-    #TODO: problems in clean_outlier(data), discritization(data)
-    #data = clean_outlier(data)
-    data = discritization(data)
     data = get_players_statistics(data, get_player_attributes())
-
     players = []
     for i in range(11):
-        players.append('home_player_' + str(i+1))
-        players.append('away_player_' + str(i+1))
+        players.append('home_player_' + str(i + 1))
+        players.append('away_player_' + str(i + 1))
 
     data = drop_features(data, players)
+    # data = clean_outlier(data)
+    data = discretization(data)
+    data = fill_nones(data)
 
-    # discritization(clean_outlier(clean_na(drop_features(data))))
-    print("train data Nulls")
-    print(data.apply(lambda x: sum(x.isnull()), axis=0))
-    print("pre process was succssefully finished")
+    print("pre processing was succssefully finished")
     return data
 
 
 # This method creates the goal variable of the data
-#TODO: change types
 def create_goal_var(data):
-    # data['target'] = data.apply(lambda _: 0, axis=1)
     for index, row in data.iterrows():
         if data.iloc[index]['home_team_goal'] > data.iloc[index]['away_team_goal']:
             data.loc[index, 'target'] = 1
@@ -247,19 +257,8 @@ def create_goal_var(data):
         else:
             data.loc[index, 'target'] = 0
     print("target data was succssefully created")
-    data = drop_features(data, ["home_team_goal", "away_team_goal", "id", "season", "home_team_id","away_team_id"])
     return data
 
-
-# This method choose best params model by using grid search algorithm
-# def best_params_model(model, X_train_, y_train_, grid_variables):
-#     k_fold = KFold(n_splits=5)
-#     X_train, X_test, y_train, y_test = train_test_split(X_train_, y_train_, test_size=0.2)
-#     grid = GridSearchCV(model, grid_variables, scoring='f1', cv=k_fold, refit=True)
-#     grid_results = grid.fit(X_train, y_train)
-#     model = grid_results.best_estimator_
-#     print("model params were succssefully selected")
-#     return model
 
 def best_params_model(model, X_train_, y_train_, grid_variables):
     k_fold = KFold(n_splits=5)
@@ -268,63 +267,8 @@ def best_params_model(model, X_train_, y_train_, grid_variables):
     grid_results = grid.fit(X_train, y_train)
     model = grid_results.best_estimator_
     print("model params were succssefully selected")
+    print(grid_results.best_params_)
     return model
-
-def classification_model(model,x,y):
-    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
-    model.fit(X_train,y_train)
-
-    model_prediction = model.predict(X_test)
-    accuracy = metrics.accuracy_score(y_test,model_prediction)
-
-    print("cross validation accuracy score %s" % "{0:.3}".format(accuracy))
-    return model
-
-# This method adds missing categorials values
-def add_categorial_missing_values(data, col, value):
-    data[col].fillna(value, inplace=True, axis="columns")
-
-
-# This method adds missing numerical values
-def add_numerical_missing_values(data, col, value):
-    data[col].fillna(value, inplace=True)
-
-
-def fill_nones(train, test):
-    # numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
-    for col in train.columns:
-        # if train[col].dtypes in numerics:
-        #     mean = train[col].mean()
-        #     add_numerical_missing_values(train, col, mean)
-        #     add_numerical_missing_values(test, col, mean)
-        # else:
-        print(train.apply(lambda x: sum(x.isnull()), axis=0))
-        best = train[col].mode()[0]
-        add_categorial_missing_values(train, col, best)
-        print(train.apply(lambda x: sum(x.isnull()), axis=0))
-        add_categorial_missing_values(test, col, best)
-
-
-    print("nones were succssefully imputed")
-    print(train)
-
-
-def fill_nones(train, test):
-    # numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
-    for col in train.columns:
-        # if train[col].dtypes in numerics:
-        #     mean = train[col].mean()
-        #     add_numerical_missing_values(train, col, mean)
-        #     add_numerical_missing_values(test, col, mean)
-        # else:
-        print(train.apply(lambda x: sum(x.isnull()), axis=0))
-        best = train[col].mode()[0]
-        add_categorial_missing_values(train, col, best)
-        print(train.apply(lambda x: sum(x.isnull()), axis=0))
-        add_categorial_missing_values(test, col, best)
-
-    print("nones were succssefully imputed")
-    print(train)
 
 
 def fit_model(model, data, X_train_, y_train_):
@@ -336,8 +280,6 @@ def fit_model(model, data, X_train_, y_train_):
         y_train = y_train_.iloc[train_index]
         X_test = X_train_.iloc[test_index, :]
         y_test = y_train_.iloc[test_index]
-        # TODO: Check this
-        # X_train, X_test = fill_nones(X_train, X_test)
         model.fit(X_train, y_train)
         model_prediction = model.predict(X_test)
         f1 = f1_score(y_test, model_prediction, average='weighted', labels=np.unique(model_prediction))
@@ -378,9 +320,17 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     best_model = best_params_model(model, X_train, y_train, grid_variables)
     best_model = fit_model(best_model, data, X_train, y_train)
     evaluate_model(best_model, "Random Forest", X_test, y_test)
-    # features_names = list(X_train.columns.values)
-    # features_importance(model, features_names, "Random Forest")
-    shap_feature_importance(best_model, X_train, False)
+
+    # get importance
+    importance = best_model.feature_importances_
+    # summarize feature importance
+    print("Feature Importance")
+    for i, v in enumerate(importance):
+        print('Feature: %0d, Score: %.5f' % (i, v))
+    # plot feature importance
+    pyplot.bar([x for x in range(len(importance))], importance)
+    # pyplot.show()
+
 
 # Logistic Regression
 def logistic_regression(data, X_train, y_train, X_test, y_test):
@@ -392,53 +342,76 @@ def logistic_regression(data, X_train, y_train, X_test, y_test):
     grid_variables = {'C': C, 'random_state': random_state, 'solver': solver, 'max_iter': max_iter}
     best_model = best_params_model(model, X_train, y_train, grid_variables)
     best_model = fit_model(best_model, data, X_train, y_train)
-    # model.fit(X_train, y_train)
     evaluate_model(best_model, "Logistic Regression", X_test, y_test)
+
+    # get importance
+    importance = best_model.coef_[0]
+    # summarize feature importance
+    print("Feature Importance")
+    for i, v in enumerate(importance):
+        print('Feature: %0d, Score: %.5f' % (i, v))
+    # plot feature importance
+    pyplot.bar([x for x in range(len(importance))], importance)
+    # pyplot.show()
+
 
 # CART
 def CART(data, X_train, y_train, X_test, y_test):
     model = DecisionTreeClassifier()
     max_depth = [2, 4, 8, 16, 32, 64]
-    min_weight_fraction_leaf = [i/20 for i in range(0, 10)]
+    min_weight_fraction_leaf = [i / 20 for i in range(0, 10)]
     grid_variables = {'max_depth': max_depth, 'min_weight_fraction_leaf': min_weight_fraction_leaf}
     best_model = best_params_model(model, X_train, y_train, grid_variables)
     best_model = fit_model(best_model, data, X_train, y_train)
-    evaluate_model(best_model, "CART", X_test, y_test)
+
+    # get importance
+    importance = best_model.feature_importances_
+    # summarize feature importance
+    print("Feature Importance")
+    for i, v in enumerate(importance):
+        print('Feature: %0d, Score: %.5f' % (i, v))
+    # plot feature importance
+    # pyplot.bar([x for x in range(len(importance))], importance)
+    # pyplot.show()
+
+def f_importances(coef, names):
+    imp = coef
+    imp,names = zip(*sorted(zip(imp,names)))
+    pyplot.barh(range(len(names)), imp, align='center')
+    pyplot.yticks(range(len(names)), names)
+    pyplot.show()
 
 def svm_model(X_train, y_train, X_test, y_test):
-
     clf = svm.SVC()
-    kernel = ['poly', 'rbf', 'sigmoid']
-    coef0 = [i/4 for i in range(0, 16)]
+    kernel = ['poly', 'rbf', 'sigmoid', 'linear']
+    coef0 = [i / 4 for i in range(0, 16)]
     grid_variables = {'kernel': kernel, 'coef0': coef0}
     best_model = best_params_model(clf, X_train, y_train, grid_variables)
 
     # Train the model using the training sets
     best_model.fit(X_train, y_train)
-
     evaluate_model(best_model, str(best_model.kernel) + " SVM", X_test, y_test)
+    # f_importances(svm.coef_, features_names)
 
 
 def get_players_statistics(data, players_data):
-
     features_names = list(players_data.columns.values)
 
     for index, row in data.iterrows():
-
         lst_home = [0] * len(features_names)
         lst_away = [0] * len(features_names)
-
         num_h_players = 11
         num_a_players = 11
+
         for i in range(11):
-            home_player_id = data.iloc[index]['home_player_' + str(i+1)]
+            home_player_id = data.iloc[index]['home_player_' + str(i + 1)]
             if math.isnan(home_player_id):
                 num_h_players -= 1
             else:
                 for idx, feature in enumerate(features_names):
                     lst_home[idx] += players_data.at[home_player_id, feature]
+            away_player_id = data.iloc[index]['away_player_' + str(i + 1)]
 
-            away_player_id = data.iloc[index]['away_player_' + str(i+1)]
             if math.isnan(away_player_id):
                 num_a_players -= 1
             else:
@@ -448,8 +421,7 @@ def get_players_statistics(data, players_data):
             home_str = "home_team_"
             away_str = "away_team_"
 
-
-        for idx,feature in enumerate(features_names):
+        for idx, feature in enumerate(features_names):
             try:
                 data.loc[index, home_str + feature] = (lst_home[idx] / num_h_players).round(0)
                 data.loc[index, away_str + feature] = (lst_away[idx] / num_a_players).round(0)
@@ -461,18 +433,14 @@ def get_players_statistics(data, players_data):
 
 
 def handle_shot_on(data):
-
-    ## iterate over the data table after the xml function turend each col into json string
-
-    for index,rows in data.iterrows():
-
-        ## counters for  each col
-
+    # iterate over the data table after the xml function turend each col into json string
+    for index, rows in data.iterrows():
+        # counters for  each col
         home_team_shoot_on = 0
         away_team_shoot_on = 0
 
-        ## this row change to value of the json string into a dict or a list of dicts depends on how many
-        ## shot on record there was in the match if we had one event its a dict,else its a list of dicts
+        # this row change to value of the json string into a dict or a list of dicts depends on how many
+        # shot on record there was in the match if we had one event its a dict,else its a list of dicts
 
         try:
             curr_dict = json.loads(data.iloc[index]["shoton"])["shoton"]["value"]
@@ -482,15 +450,13 @@ def handle_shot_on(data):
             data.loc[index, 'away_shoton'] = float(0)
             continue
 
-        ## if it a list of dict
-
+        # if it a list of dict
         if type(curr_dict) is list:
-
-            #iterate over the list
+            # iterate over the list
             for shoton in curr_dict:
 
-                ## check if the team value in the xml dict match the home id col or the away to
-                ## update the counters accordingly
+                # check if the team value in the xml dict match the home id col or the away to
+                # update the counters accordingly
                 try:
 
                     if float(shoton["team"]) == data.iloc[index]['home_team_id']:
@@ -499,13 +465,13 @@ def handle_shot_on(data):
                         away_team_shoot_on += float(1)
                 except:
                     continue
-            ## set the new col of the home and away shot in the data dataframe
+            # set the new col of the home and away shot in the data dataframe
             data.loc[index, 'home_shoton'] = home_team_shoot_on
             data.loc[index, 'away_shoton'] = away_team_shoot_on
 
-        ## if it a single dict
+        # if it a single dict
         else:
-            ## same logic guest without a loop
+            # same logic guest without a loop
             try:
                 if float(curr_dict["team"]) == data.iloc[index]['home_team_id']:
                     home_team_shoot_on += float(1)
@@ -522,8 +488,7 @@ def handle_shot_on(data):
 
 
 def handle_shot_off(data):
-
-    for index,rows in data.iterrows():
+    for index, rows in data.iterrows():
 
         home_team_shoot_off = 0
         away_team_shoot_off = 0
@@ -570,9 +535,9 @@ def handle_shot_off(data):
                 data.loc[index, 'away_shotoff'] = float(0)
                 continue
 
-def handle_goal(data):
 
-    for index,rows in data.iterrows():
+def handle_goal(data):
+    for index, rows in data.iterrows():
 
         home_team_goal = 0
         away_team_goal = 0
@@ -619,8 +584,7 @@ def handle_goal(data):
 
 
 def handle_corner(data):
-
-    for index,rows in data.iterrows():
+    for index, rows in data.iterrows():
 
         home_team_corner = 0
         away_team_corner = 0
@@ -664,8 +628,8 @@ def handle_corner(data):
                 data.loc[index, 'away_corner'] = float(0)
                 continue
 
-def handle_card(data):
 
+def handle_card(data):
     for index, rows in data.iterrows():
 
         home_team_cards = 0
@@ -712,7 +676,6 @@ def handle_card(data):
 
 
 def handle_foulcommit(data):
-
     for index, rows in data.iterrows():
 
         home_team_fouls = 0
@@ -738,7 +701,6 @@ def handle_foulcommit(data):
                 except:
                     continue
 
-
             data.loc[index, 'home_fouls'] = home_team_fouls
             data.loc[index, 'away_fouls'] = away_team_fouls
 
@@ -758,44 +720,37 @@ def handle_foulcommit(data):
                 continue
 
 
-
-
-
-
-
-def shap_feature_importance(model, X_df, one_dimension):
-    explainer = shap.Explainer(model)
-    shap_values = explainer(X_df)
-    if not one_dimension:
-        shap_values.values = shap_values.values[:, :, 1]
-        shap_values.base_values = shap_values.base_values[:, 1]
-    shap.plots.beeswarm(shap_values, max_display=50)
-    shap.plots.bar(shap_values)
-
-
 def handle_data(data):
     data = xml_change_values(data)
     # clean data (X)
     X = pre_processing(data)
     # create goal variable (y)
     create_goal_var(X)
+    data = drop_features(data, ["home_team_goal", "away_team_goal", "id", "home_team_id", "away_team_id"])
     X = data.iloc[:, :-1]
     y = data['target']
 
     return data, X, y
 
 
-
 if __name__ == '__main__':
-    # handle train data
-    train_data, X_train, y_train = handle_data(get_train_data())
+    # # handle train data
+    # train_data, X_train, y_train = handle_data(get_train_data())
+    # train_data.to_csv("train_data.csv", index=False)
+    #
+    # # handle test data (sessons 2015/2016)
+    # test_data, X_test, y_test = handle_data(get_test_data())
+    # test_data.to_csv("test_data.csv", index=False)
 
-    # handle test data (sessons 2015/2016)
-    test_data, X_test, y_test = handle_data(get_test_data())
+    train_data = pd.read_csv("train_data.csv")
+    X_train = train_data.iloc[:, :-1]
+    y_train = train_data['target']
 
-    svm_model(X_train, y_train,  X_test, y_test)
-    logistic_regression(train_data, X_train, y_train,  X_test, y_test)
-    random_forest(train_data, X_train, y_train,  X_test, y_test)
+    test_data = pd.read_csv("test_data.csv")
+    X_test = test_data.iloc[:, :-1]
+    y_test = test_data['target']
+
+    random_forest(train_data, X_train, y_train, X_test, y_test)
+    logistic_regression(train_data, X_train, y_train, X_test, y_test)
     CART(train_data, X_train, y_train, X_test, y_test)
-
-
+    svm_model(X_train, y_train, X_test, y_test)
