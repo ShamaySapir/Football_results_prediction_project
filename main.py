@@ -1,30 +1,18 @@
 import json
 import math
-import time
-
 import shap
 import xmltodict
-import sys
-# from bs4 import BeautifulSoup
 import sqlite3
 import pandas as pd
 import numpy as np
 from sklearn import metrics, svm
 from sklearn.preprocessing import LabelEncoder
 from numpy.core import mean
-from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestClassifier
-# from sklearn.tree import DecisionTreeClassifier, export_graphviz
-from sklearn.metrics import f1_score, accuracy_score, confusion_matrix, precision_score, recall_score
-from sklearn.model_selection import RandomizedSearchCV, KFold, GridSearchCV, train_test_split, cross_val_score, StratifiedKFold
-import matplotlib.pyplot as plt
-from sklearn import tree
-
-# imports for logistic regression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
+from sklearn.model_selection import KFold, GridSearchCV, train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, confusion_matrix
-
-
 
 categorial_vec = ['league_name', 'season']
 numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
@@ -34,48 +22,48 @@ numerical_vec = ['stage', 'home_team_goal', 'away_team_goal']
 def get_train_data():
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id, 
-                                            League.name AS league_name, 
-                                            season, 
-                                            stage, 
-                                            shoton,
-                                            shotoff,
-                                            goal,
-                                            corner,
-                                            foulcommit,
-                                            card,
-                                            HTeam.team_api_id AS home_team_id,
-                                            ATeam.team_api_id AS away_team_id,
-                                            home_team_goal, 
-                                            away_team_goal,
-                                            home_player_1, 
-                                            home_player_2,
-                                            home_player_3, 
-                                            home_player_4, 
-                                            home_player_5, 
-                                            home_player_6, 
-                                            home_player_7, 
-                                            home_player_8, 
-                                            home_player_9, 
-                                            home_player_10, 
-                                            home_player_11, 
-                                            away_player_1, 
-                                            away_player_2, 
-                                            away_player_3, 
-                                            away_player_4, 
-                                            away_player_5, 
-                                            away_player_6, 
-                                            away_player_7, 
-                                            away_player_8, 
-                                            away_player_9, 
-                                            away_player_10, 
-                                            away_player_11
-                                    FROM Match
-                                    JOIN League on League.id = Match.league_id
-                                    LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
-                                    LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
-                                    WHERE season not like '2015/2016' and goal is not null
-                                    LIMIT 100
-                                   ;""", conn)
+                        League.name AS league_name, 
+                        season, 
+                        stage, 
+                        shoton,
+                        shotoff,
+                        goal,
+                        corner,
+                        foulcommit,
+                        card,
+                        HTeam.team_api_id AS home_team_id,
+                        ATeam.team_api_id AS away_team_id,
+                        home_team_goal, 
+                        away_team_goal,
+                        home_player_1, 
+                        home_player_2,
+                        home_player_3, 
+                        home_player_4, 
+                        home_player_5, 
+                        home_player_6, 
+                        home_player_7, 
+                        home_player_8, 
+                        home_player_9, 
+                        home_player_10, 
+                        home_player_11, 
+                        away_player_1, 
+                        away_player_2, 
+                        away_player_3, 
+                        away_player_4, 
+                        away_player_5, 
+                        away_player_6, 
+                        away_player_7, 
+                        away_player_8, 
+                        away_player_9, 
+                        away_player_10, 
+                        away_player_11
+                FROM Match
+                JOIN League on League.id = Match.league_id
+                LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
+                LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
+                WHERE season not like '2015/2016' and goal is not null
+                LIMIT 100
+               ;""", conn)
 
     print("Got train data succssefully")
     return data
@@ -94,51 +82,49 @@ def get_player_attributes():
 def get_test_data():
     conn = sqlite3.connect('database.sqlite')
     data = pd.read_sql("""SELECT Match.id, 
-                                            League.name AS league_name, 
-                                            season, 
-                                            stage, 
-                                            shoton,
-                                            shotoff,
-                                            goal,
-                                            corner,
-                                            foulcommit,
-                                            card,
-                                            HTeam.team_api_id AS home_team_id,
-                                            ATeam.team_api_id AS away_team_id,
-                                            home_team_goal, 
-                                            away_team_goal,
-                                            home_player_1, 
-                                            home_player_2,
-                                            home_player_3, 
-                                            home_player_4, 
-                                            home_player_5, 
-                                            home_player_6, 
-                                            home_player_7, 
-                                            home_player_8, 
-                                            home_player_9, 
-                                            home_player_10, 
-                                            home_player_11, 
-                                            away_player_1, 
-                                            away_player_2, 
-                                            away_player_3, 
-                                            away_player_4, 
-                                            away_player_5, 
-                                            away_player_6, 
-                                            away_player_7, 
-                                            away_player_8, 
-                                            away_player_9, 
-                                            away_player_10, 
-                                            away_player_11
-                                    FROM Match
-                                    JOIN League on League.id = Match.league_id
-                                    LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
-                                    LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
-                                    WHERE season like '2015/2016' and goal is not null
-                                    ORDER by date
-                                    LIMIT 100;
-                                    """, conn)
-
-
+                        League.name AS league_name, 
+                        season, 
+                        stage, 
+                        shoton,
+                        shotoff,
+                        goal,
+                        corner,
+                        foulcommit,
+                        card,
+                        HTeam.team_api_id AS home_team_id,
+                        ATeam.team_api_id AS away_team_id,
+                        home_team_goal, 
+                        away_team_goal,
+                        home_player_1, 
+                        home_player_2,
+                        home_player_3, 
+                        home_player_4, 
+                        home_player_5, 
+                        home_player_6, 
+                        home_player_7, 
+                        home_player_8, 
+                        home_player_9, 
+                        home_player_10, 
+                        home_player_11, 
+                        away_player_1, 
+                        away_player_2, 
+                        away_player_3, 
+                        away_player_4, 
+                        away_player_5, 
+                        away_player_6, 
+                        away_player_7, 
+                        away_player_8, 
+                        away_player_9, 
+                        away_player_10, 
+                        away_player_11
+                FROM Match
+                JOIN League on League.id = Match.league_id
+                LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
+                LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
+                WHERE season like '2015/2016' and goal is not null
+                ORDER by date
+                LIMIT 100;
+                """, conn)
     print("Got test data succssefully")
     return data
 
@@ -411,7 +397,7 @@ def logistic_regression(data, X_train, y_train, X_test, y_test):
 
 # CART
 def CART(data, X_train, y_train, X_test, y_test):
-    model = tree.DecisionTreeClassifier()
+    model = DecisionTreeClassifier()
     max_depth = [2, 4, 8, 16, 32, 64]
     min_weight_fraction_leaf = [i/20 for i in range(0, 10)]
     grid_variables = {'max_depth': max_depth, 'min_weight_fraction_leaf': min_weight_fraction_leaf}
