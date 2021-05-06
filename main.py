@@ -23,20 +23,6 @@ from matplotlib import pyplot
 #                   'home_team_strength', 'away_team_strength', 'home_team_interceptions', 'away_team_interceptions',
 #                   'home_team_standing_tackle', 'away_team_standing_tackle', 'home_team_sliding_tackle',
 #                   'away_team_sliding_tackle']
-#
-# features_names = ['home_shoton', 'home_fouls', 'away_cards', 'away_team_overall_rating', 'away_team_potential',
-#                   'away_team_stamina', 'away_team_acceleration', 'away_team_sprint_speed', 'away_team_interceptions',
-#                   'home_team_standing_tackle']
-
-
-features_to_drop = ['league_name', 'season', 'stage', 'away_shoton', 'home_shotoff', 'away_shotoff',
-                  'home_corner', 'away_corner', 'away_fouls', 'home_cards',
-                  'home_team_overall_rating', 'home_team_potential',
-                  'home_team_stamina', 'home_team_acceleration',
-                  'home_team_sprint_speed', 'home_team_shot_power', 'away_team_shot_power',
-                  'home_team_strength', 'away_team_strength', 'home_team_interceptions', 'away_team_standing_tackle',
-                  'home_team_sliding_tackle',
-                  'away_team_sliding_tackle']
 
 # get train data from sqlite
 def get_train_data():
@@ -82,6 +68,7 @@ def get_train_data():
                 LEFT JOIN Team AS HTeam on HTeam.team_api_id = Match.home_team_api_id
                 LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                 WHERE season not like '2015/2016' and goal is not null
+                LIMIT 100000
                ;""", conn)
 
     print("Got train data succssefully")
@@ -142,6 +129,7 @@ def get_test_data():
                 LEFT JOIN Team AS ATeam on ATeam.team_api_id = Match.away_team_api_id
                 WHERE season like '2015/2016' and goal is not null
                 ORDER by date
+                LIMIT 100000
                 ;""", conn)
     print("Got test data succssefully")
 
@@ -528,12 +516,12 @@ def add_numerical_missing_values(data, col, value):
 
 def fill_nones(data):
     print("Data none values")
-    print(data.apply(lambda x: sum(x.isnull()), axis=0))
+    # print(data.apply(lambda x: sum(x.isnull()), axis=0))
     lst = data.columns[data.isna().any()].tolist()
     for col in lst:
         mean = data[col].mean()
         add_numerical_missing_values(data, col, mean)
-    print(data.apply(lambda x: sum(x.isnull()), axis=0))
+    # print(data.apply(lambda x: sum(x.isnull()), axis=0))
     print("nones were successfully imputed")
     return data
 
@@ -625,14 +613,10 @@ def random_forest(data, X_train, y_train, X_test, y_test):
     evaluate_model(best_model, "Random Forest", X_test, y_test)
 
     # get importance
-    importance = best_model.feature_importances_
-    # summarize feature importance
-    print("Feature Importance")
-    for i, v in enumerate(importance):
-        print('Feature: %0d, Score: %.5f' % (i, v))
-    # plot feature importance
-    pyplot.bar([x for x in range(len(importance))], importance)
-    # pyplot.show()
+    sorted_idx = best_model.feature_importances_.argsort()
+    pyplot.barh(X_train.columns[sorted_idx], best_model.feature_importances_[sorted_idx], color=['royalblue'])
+    pyplot.xlabel("Random Forest Feature Importance")
+    pyplot.savefig('RF-allFeatures.png', dpi=300, bbox_inches='tight')
 
 
 # Logistic Regression
@@ -648,14 +632,13 @@ def logistic_regression(data, X_train, y_train, X_test, y_test):
     evaluate_model(best_model, "Logistic Regression", X_test, y_test)
 
     # get importance
-    importance = best_model.coef_[0]
-    # summarize feature importance
-    print("Feature Importance")
-    for i, v in enumerate(importance):
-        print('Feature: %0d, Score: %.5f' % (i, v))
-    # plot feature importance
-    pyplot.bar([x for x in range(len(importance))], importance)
-    # pyplot.show()
+    feature_importance = pd.DataFrame(
+        {'feature': list(X_train.columns), 'feature_importance': [abs(i) for i in best_model.coef_[0]]})
+    feature_importance = feature_importance.sort_values('feature_importance', ascending=True)
+
+    pyplot.barh(feature_importance['feature'], feature_importance['feature_importance'], color=['royalblue'])
+    pyplot.xlabel("Logistic Regression Feature Importance")
+    pyplot.savefig('LR-allFeatures.png', dpi=300, bbox_inches='tight')
 
 
 # CART
@@ -669,26 +652,15 @@ def CART(data, X_train, y_train, X_test, y_test):
     evaluate_model(best_model, "CART", X_test, y_test)
 
     # get importance
-    importance = best_model.feature_importances_
-    # summarize feature importance
-    print("Feature Importance")
-    for i, v in enumerate(importance):
-        print('Feature: %0d, Score: %.5f' % (i, v))
-    # plot feature importance
-    pyplot.bar([x for x in range(len(importance))], importance)
-    pyplot.show()
-
-
-def f_importances(coef, names):
-    imp = coef
-    imp,names = zip(*sorted(zip(imp,names)))
-    pyplot.barh(range(len(names)), imp, align='center')
-    pyplot.yticks(range(len(names)), names)
-    pyplot.show()
+    sorted_idx = best_model.feature_importances_.argsort()
+    pyplot.barh(X_train.columns[sorted_idx], best_model.feature_importances_[sorted_idx], color=['royalblue'])
+    pyplot.xlabel("CART Feature Importance")
+    pyplot.savefig('CART-allFeatures.png', dpi=300, bbox_inches='tight')
 
 
 def svm_model(X_train, y_train, X_test, y_test):
     clf = svm.SVC()
+    # kernel = ['poly','sigmoid','linear']
     kernel = ['linear']
     coef0 = [i/4 for i in range(0, 6)]
     grid_variables = {'kernel': kernel, 'coef0': coef0}
@@ -696,9 +668,16 @@ def svm_model(X_train, y_train, X_test, y_test):
 
     # Train the model using the training sets
     best_model.fit(X_train, y_train)
-
     evaluate_model(best_model, str(best_model.kernel) + " SVM", X_test, y_test)
-    # f_importances(best_model.coef_, features_names)
+
+    # get importance
+    feature_importance = pd.DataFrame(
+        {'feature': list(X_train.columns), 'feature_importance': [abs(i) for i in best_model.coef_[0]]})
+    feature_importance = feature_importance.sort_values('feature_importance', ascending=True)
+
+    pyplot.barh(feature_importance['feature'], feature_importance['feature_importance'], color=['royalblue'])
+    pyplot.xlabel("SVM Feature Importance")
+    pyplot.savefig('SVM-allFeatures.png', dpi=300, bbox_inches='tight')
 
 
 def get_players_statistics(data, players_data):
@@ -747,7 +726,7 @@ def handle_data(data):
     # create goal variable (y)
     create_goal_var(X)
     data = drop_features(data, ["home_team_goal", "away_team_goal", "id", "home_team_id", "away_team_id"])
-    data = drop_features(data, features_to_drop)
+    # data = drop_features(data, features_to_drop)
     X = data.iloc[:, :-1]
     y = data['target']
 
@@ -757,12 +736,12 @@ def handle_data(data):
 if __name__ == '__main__':
     # handle train data
     train_data, X_train, y_train = handle_data(get_train_data())
-    train_data.to_csv("train_data.csv", index=False)
+    # train_data.to_csv("train_data.csv", index=False)
 
 
     # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
-    test_data.to_csv("test_data.csv", index=False)
+    # test_data.to_csv("test_data.csv", index=False)
 
     # train_data = pd.read_csv("train_data.csv")
     # X_train = train_data.iloc[:, :-1]
