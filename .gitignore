@@ -3,3 +3,4 @@ venv
 .Ds_Store
 database.sqlite
 untitled folder
+*.png
