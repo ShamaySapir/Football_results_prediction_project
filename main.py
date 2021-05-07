@@ -4,7 +4,7 @@ import xmltodict
 import sqlite3
 import pandas as pd
 import numpy as np
-from sklearn import metrics, svm
+from sklearn import svm
 from sklearn.preprocessing import LabelEncoder
 from numpy.core import mean
 from sklearn.ensemble import RandomForestClassifier
@@ -14,31 +14,36 @@ from sklearn.model_selection import KFold, GridSearchCV, train_test_split
 from sklearn.linear_model import LogisticRegression
 from matplotlib import pyplot
 
-# RandomForest_features_names = ['league_name', 'season', 'stage', 'home_shoton', 'away_shoton', 'home_shotoff', 'away_shotoff',
-#                   'home_corner', 'away_corner', 'home_fouls', 'away_fouls', 'home_cards', 'away_cards',
-#                     'away_team_overall_rating', 'home_team_potential', 'away_team_potential',
-#                   'home_team_stamina', 'away_team_stamina', 'home_team_acceleration', 'away_team_acceleration',
-#                   'home_team_sprint_speed', 'away_team_sprint_speed', 'home_team_shot_power', 'away_team_shot_power',
-#                   'home_team_strength', 'away_team_strength', 'home_team_interceptions', 'away_team_interceptions',
-#                   'home_team_standing_tackle', 'away_team_standing_tackle', 'home_team_sliding_tackle',
-#                   'away_team_sliding_tackle']
+all_features_names = ['league_name', 'season', 'stage', 'home_shoton', 'away_shoton', 'home_shotoff', 'away_shotoff',
+                      'home_corner', 'away_corner', 'home_fouls', 'away_fouls', 'home_cards', 'away_cards',
+                      'home_team_overall_rating', 'away_team_overall_rating', 'home_team_potential',
+                      'away_team_potential', 'home_team_stamina', 'away_team_stamina', 'home_team_acceleration',
+                      'away_team_acceleration', 'home_team_sprint_speed', 'away_team_sprint_speed',
+                      'home_team_shot_power', 'away_team_shot_power', 'home_team_strength', 'away_team_strength',
+                      'home_team_interceptions', 'away_team_interceptions', 'home_team_standing_tackle',
+                      'away_team_standing_tackle', 'home_team_sliding_tackle', 'away_team_sliding_tackle']
 
-# RandomForest_features_names = ['league_name', 'season', 'stage', 'home_shoton', 'away_shoton', 'home_shotoff', 'away_shotoff',
-#                   'home_corner', 'away_corner', 'home_fouls', 'away_fouls', 'away_cards',
-#                   'home_team_stamina', 'away_team_stamina', 'home_team_acceleration', 'away_team_acceleration',
-#                   'home_team_sprint_speed',
-#                   'home_team_strength', 'away_team_strength', 'home_team_interceptions', 'away_team_interceptions',
-#                   'home_team_standing_tackle', 'away_team_standing_tackle', 'home_team_sliding_tackle',
-#                   'away_team_sliding_tackle']
+RandomForest_features_to_drop = ['league_name', 'season', 'home_shoton', 'away_shoton', 'home_shotoff', 'away_shotoff',
+                                 'away_corner', 'home_fouls', 'away_team_strength']
 
-logisticRegression_features_names = ['league_name', 'season', 'stage', 'home_shoton', 'away_shoton','away_shotoff',
-                  'home_corner', 'away_corner', 'home_fouls', 'away_fouls',
-                  'home_team_potential',
-                  'home_team_stamina', 'away_team_stamina', 'home_team_acceleration', 'away_team_acceleration',
-                  'home_team_sprint_speed', 'away_team_sprint_speed', 'home_team_shot_power', 'away_team_shot_power',
-                  'home_team_strength', 'away_team_strength', 'home_team_interceptions', 'away_team_interceptions',
-                  'home_team_standing_tackle', 'away_team_standing_tackle', 'home_team_sliding_tackle',
-                  'away_team_sliding_tackle']
+logisticRegression_features_to_drop = ['league_name', 'season', 'stage', 'home_shoton', 'away_shoton','away_shotoff',
+                                       'away_corner', 'home_fouls', 'away_fouls', 'home_team_potential',
+                                       'away_team_stamina', 'home_team_acceleration', 'away_team_sprint_speed',
+                                       'home_team_shot_power', 'away_team_shot_power', 'home_team_strength',
+                                       'away_team_strength', 'home_team_interceptions', 'home_team_sliding_tackle']
+
+svm_features_to_drop = ['league_name', 'stage', 'away_shoton', 'away_fouls', 'away_cards', 'away_team_stamina',
+                        'home_team_shot_power', 'away_team_shot_power', 'home_team_strength', 'away_team_strength',
+                        'home_team_standing_tackle']
+
+cart_features_to_drop = ['league_name', 'season', 'stage', 'home_shoton', 'away_shoton', 'away_shotoff', 'home_corner',
+                         'home_fouls', 'away_fouls', 'away_cards', 'home_team_stamina', 'away_team_stamina',
+                         'home_team_acceleration', 'away_team_acceleration', 'home_team_sprint_speed',
+                         'away_team_sprint_speed', 'home_team_shot_power', 'away_team_shot_power',
+                         'home_team_strength', 'away_team_strength', 'home_team_interceptions',
+                         'away_team_interceptions', 'home_team_standing_tackle', 'away_team_standing_tackle',
+                         'home_team_sliding_tackle', 'away_team_sliding_tackle']
+
 
 # get train data from sqlite
 def get_train_data():
@@ -487,6 +492,44 @@ def drop_features(data, features_to_drop):
     return data
 
 
+def get_players_statistics(data, players_data):
+    features_names = list(players_data.columns.values)
+
+    for index, row in data.iterrows():
+        lst_home = [0] * len(features_names)
+        lst_away = [0] * len(features_names)
+        num_h_players = 11
+        num_a_players = 11
+
+        for i in range(11):
+            home_player_id = data.iloc[index]['home_player_' + str(i + 1)]
+            if math.isnan(home_player_id):
+                num_h_players -= 1
+            else:
+                for idx, feature in enumerate(features_names):
+                    lst_home[idx] += players_data.at[home_player_id, feature]
+            away_player_id = data.iloc[index]['away_player_' + str(i + 1)]
+
+            if math.isnan(away_player_id):
+                num_a_players -= 1
+            else:
+                for idx, feature in enumerate(features_names):
+                    lst_away[idx] += players_data.at[away_player_id, feature]
+
+            home_str = "home_team_"
+            away_str = "away_team_"
+
+        for idx, feature in enumerate(features_names):
+            try:
+                data.loc[index, home_str + feature] = (lst_home[idx] / num_h_players).round(0)
+                data.loc[index, away_str + feature] = (lst_away[idx] / num_a_players).round(0)
+            except:
+                print((lst_home[idx] / num_h_players))
+                print((lst_home[idx] / num_h_players))
+
+    return data
+
+
 def players_info(data):
     data = get_players_statistics(data, get_player_attributes())
     players = []
@@ -602,9 +645,9 @@ def fit_model(model, data, X_train_, y_train_):
 def print_model_evaluation(evaluation_list, name):
     print(f'--------{name}-------')
     print('Accuracy Score: %.3f' % (mean(evaluation_list[0])))
-    print('F1 Score: %.3f' % (evaluation_list[1]))
-    print('Precision Score: %.3f' % (evaluation_list[2]))
     print('Recall Score: %.3f' % (evaluation_list[3]))
+    print('Precision Score: %.3f' % (evaluation_list[2]))
+    print('F1 Score: %.3f' % (evaluation_list[1]))
 
 
 def evaluate_model(model, name, X_test, y_test):
@@ -676,8 +719,7 @@ def CART(data, X_train, y_train, X_test, y_test):
 
 def svm_model(X_train, y_train, X_test, y_test):
     clf = svm.SVC()
-    # kernel = ['poly','sigmoid','linear']
-    kernel = ['linear']
+    kernel = ['linear', 'sigmoid', 'rbf']
     coef0 = [i/4 for i in range(0, 6)]
     grid_variables = {'kernel': kernel, 'coef0': coef0}
     best_model = best_params_model(clf, X_train, y_train, grid_variables)
@@ -696,44 +738,6 @@ def svm_model(X_train, y_train, X_test, y_test):
     pyplot.savefig('SVM-allFeatures.png', dpi=300, bbox_inches='tight')
 
 
-def get_players_statistics(data, players_data):
-    features_names = list(players_data.columns.values)
-
-    for index, row in data.iterrows():
-        lst_home = [0] * len(features_names)
-        lst_away = [0] * len(features_names)
-        num_h_players = 11
-        num_a_players = 11
-
-        for i in range(11):
-            home_player_id = data.iloc[index]['home_player_' + str(i + 1)]
-            if math.isnan(home_player_id):
-                num_h_players -= 1
-            else:
-                for idx, feature in enumerate(features_names):
-                    lst_home[idx] += players_data.at[home_player_id, feature]
-            away_player_id = data.iloc[index]['away_player_' + str(i + 1)]
-
-            if math.isnan(away_player_id):
-                num_a_players -= 1
-            else:
-                for idx, feature in enumerate(features_names):
-                    lst_away[idx] += players_data.at[away_player_id, feature]
-
-            home_str = "home_team_"
-            away_str = "away_team_"
-
-        for idx, feature in enumerate(features_names):
-            try:
-                data.loc[index, home_str + feature] = (lst_home[idx] / num_h_players).round(0)
-                data.loc[index, away_str + feature] = (lst_away[idx] / num_a_players).round(0)
-            except:
-                print((lst_home[idx] / num_h_players))
-                print((lst_home[idx] / num_h_players))
-
-    return data
-
-
 def handle_data(data):
     data = xml_change_values(data)
     data = players_info(data)
@@ -742,7 +746,7 @@ def handle_data(data):
     # create goal variable (y)
     create_goal_var(X)
     data = drop_features(data, ["home_team_goal", "away_team_goal", "id", "home_team_id", "away_team_id"])
-    data = drop_features(data, RandomForest_features_names)
+    # data = drop_features(data, logisticRegression_features_to_drop)
     X = data.iloc[:, :-1]
     y = data['target']
 
@@ -750,12 +754,11 @@ def handle_data(data):
 
 
 if __name__ == '__main__':
-    # handle train data
+    # # handle train data
     train_data, X_train, y_train = handle_data(get_train_data())
     # train_data.to_csv("train_data.csv", index=False)
-
-
-    # handle test data (sessons 2015/2016)
+    #
+    # # handle test data (sessons 2015/2016)
     test_data, X_test, y_test = handle_data(get_test_data())
     # test_data.to_csv("test_data.csv", index=False)
 
@@ -767,7 +770,7 @@ if __name__ == '__main__':
     # X_test = test_data.iloc[:, :-1]
     # y_test = test_data['target']
 
-    # svm_model(X_train, y_train, X_test, y_test)
-    # random_forest(train_data, X_train, y_train, X_test, y_test)
+    svm_model(X_train, y_train, X_test, y_test)
+    random_forest(train_data, X_train, y_train, X_test, y_test)
     logistic_regression(train_data, X_train, y_train, X_test, y_test)
-    # CART(train_data, X_train, y_train, X_test, y_test)
+    CART(train_data, X_train, y_train, X_test, y_test)
